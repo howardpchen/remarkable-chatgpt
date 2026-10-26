@@ -6,6 +6,14 @@ compatibility inventory: Paper Pro and Move intentionally have **empty install
 release lists**. Compiling is not runtime validation. Existing rM2 3.27.3.0
 installer acceptance is retained as a prototype baseline, not newly certified.
 
+## Current checkpoint
+
+See [PORT-STATUS.md](PORT-STATUS.md) for the 2026-10-26 evidence matrix and next
+gates. Move native insertion, owner-observed placement/scale, undo/redo and
+close/reopen persistence passed in a bounded offline spike. Capture remains
+blocked; Paper Pro hardware testing remains independent and pending. The
+checklist below is an acceptance plan, not a list of completed tests.
+
 ## Builds
 
 Use a Linux host and the official SDK matching **host architecture, exact product

@@ -18,8 +18,11 @@ The probe reads visible window dimensions/DPR, the `documentLoaded` boolean,
 object references required to inspect a small whitelist of method signatures
 (`viewToScene`, `insertImageFileAsSceneItem`), and returns a finite/nondegenerate
 mapping boolean. It does not return scene coordinates, object names, content,
-paths, IDs, controller bounds, or arbitrary property/method dumps. A temporary
-QtObject uses only read-only coordinate mapping. Discovery runs on the UI thread;
+paths, IDs, controller bounds, or arbitrary property/method dumps. A fixed synchronous JavaScript function in the existing engine uses only
+read-only coordinate mapping, without QML component imports. It preserves the
+existing UI object ownership. `mappingStatus` distinguishes initialization or
+invocation errors (`mappingFinite=null`) from tested valid/non-finite/degenerate
+mappings. Discovery runs on the UI thread;
 large object trees are bounded at 100,000 objects. It can briefly delay the UI.
 Metadata signatures alone do not prove that native insertion works.
 
@@ -90,5 +93,28 @@ Verified upstream protocol:
 - `xovi-message-broker/src/messagebroker.cpp`: version-1 simpleSignal handlers
   return malloc-compatible strings, which the broker frees.
 
-No actual tablet load, FIFO call, runtime metadata or image placement has been
-verified by these local build/policy checks.
+## Runtime evidence and mapping-helper correction
+
+The process-gated diagnostic loaded successfully; a library-only probe returned
+954 x 1696 at DPR 1. On 2026-10-26 the owner opened a disposable notebook and a
+single bounded probe confirmed `insertImageFileAsSceneItem(QUrl,QPointF)` and
+`viewToScene(QVariant)` with `documentLoaded=true`. The same application process
+remained stable with zero restarts. No capture, insertion or API call ran.
+
+The original mapping check returned false while the journal reported
+`QQmlComponent: Component is not ready`. That result is inconclusive: `setData`
+can leave imports loading, and immediate `create` does not establish readiness.
+The revised helper avoids component creation/imports entirely, evaluates only a
+fixed read-only function, and reports fixed status categories. Host integration
+checks use a real QQuickItem wrapper with a native mapping method and cover valid
+transformed coordinates, degenerate/non-finite mappings, missing methods,
+missing engines and unchanged object ownership. Run through `./test.sh`.
+The revised helper was loaded with owner approval on 2026-10-26. After the
+owner reopened the disposable notebook, one bounded probe returned
+`mappingStatus=valid`, `mappingFinite=true` and `documentLoaded=true`. The
+same app PID3096 remained active with zero restarts and root read-only.
+This read-only check alone does not establish capture calibration or insertion
+behavior. A subsequent **separate offline spike** passed one synthetic insertion
+with owner-observed placement/scale, undo/redo and close/reopen persistence;
+Qt window capture failed. See the [current evidence matrix](../../docs/PORT-STATUS.md).
+The diagnostic described here still never captures or inserts anything.

@@ -1,5 +1,20 @@
 # Validation status
 
+## Scope and latest port results
+
+The history below concerns the **rM2 prototype**, including older rendering
+implementations; it is not Paper Pro/Move certification. For the current
+new-device matrix, see [port status](docs/PORT-STATUS.md).
+
+As of 2026-10-26, the Move bounded offline spike passed read-only mapping and
+one synthetic native insertion, with owner-confirmed placement/scale, undo, redo
+and close/reopen persistence. Qt capture failed (`qt-capture-unavailable`);
+`rm-shot` is absent and untested there. Full offline integration and live API
+testing remain pending. Paper Pro requires independent hardware validation.
+Production support for both targets remains disabled.
+
+## rM2 validation history
+
 - ARMv7 shared library compiled with the official 3.27-series reMarkable SDK.
 - Host tests passed: blank/occupied page boundaries, response parsing, incomplete/error/refusal handling, and handwriting font rendering.
 - Qt qmlformat parsed the inserted QML control successfully.

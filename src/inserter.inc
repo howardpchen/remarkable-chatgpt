@@ -145,6 +145,27 @@ QtObject {
     property real nativeImageHeight: 0
     property bool appendBelowContent: false
 
+    // Read-only calibration: no notebook content or dynamic UI state. Called
+    // on the GUI thread so a request can detect zoom, pan and view changes.
+    function viewportSnapshot(view) {
+        try {
+            if (!view || !isFinite(view.width) || !isFinite(view.height) ||
+                view.width <= 0 || view.height <= 0) return ""
+            const points = [[0, 0], [100, 0], [0, 100]]
+            let mapped = []
+            for (let i = 0; i < points.length; ++i) {
+                const local = view.mapFromItem(null, points[i][0], points[i][1])
+                const scene = view.viewToScene(local)
+                if (!scene || !isFinite(scene.x) || !isFinite(scene.y)) return ""
+                mapped.push([scene.x, scene.y])
+            }
+            const determinant = (mapped[1][0]-mapped[0][0])*(mapped[2][1]-mapped[0][1]) -
+                                (mapped[1][1]-mapped[0][1])*(mapped[2][0]-mapped[0][0])
+            if (!isFinite(determinant) || Math.abs(determinant) < 0.000001) return ""
+            return JSON.stringify({width:view.width, height:view.height, points:mapped})
+        } catch (exception) { return "" }
+    }
+
     function insertText(value, x, y, coordinateSpace) {
         const controller = sceneController
         if (!controller)
@@ -502,6 +523,37 @@ TextPayload loadTextPayload(const QJsonObject &request)
     if (payload.text.isEmpty())
         return {{}, payload.path, "empty-text", "text must not be empty"};
     return payload;
+}
+
+// Must be called on the GUI thread. Match image-view selection to insertion.
+QJsonObject diaryViewportSnapshot()
+{
+    if (!QCoreApplication::instance() ||
+        QThread::currentThread() != QCoreApplication::instance()->thread()) return {};
+    const auto context = findActivePage();
+    if (!context.controller) return {};
+    for (QObject *object : runtimeObjects()) {
+        auto *view = qobject_cast<QQuickItem *>(object);
+        if (!view || !view->isVisible() || controllerProperty(object,"controller") != context.controller) continue;
+        bool mapping = false;
+        for (int i=0; i<object->metaObject()->methodCount(); ++i)
+            if (object->metaObject()->method(i).name()=="viewToScene") { mapping=true; break; }
+        if (!mapping) continue;
+        QString error;
+        QObject *helper = ensureHelper(&error);
+        QVariant result;
+        if (!helper || !view->window() || !QMetaObject::invokeMethod(helper,"viewportSnapshot",
+                Q_RETURN_ARG(QVariant,result), Q_ARG(QVariant,QVariant::fromValue(object)))) return {};
+        auto snapshot = QJsonDocument::fromJson(result.toString().toUtf8()).object();
+        if (snapshot.isEmpty()) return {};
+        if (view->window()->width() <= 0 || view->window()->height() <= 0 ||
+            !std::isfinite(view->window()->devicePixelRatio()) || view->window()->devicePixelRatio() <= 0) return {};
+        snapshot.insert("windowWidth",view->window()->width());
+        snapshot.insert("windowHeight",view->window()->height());
+        snapshot.insert("devicePixelRatio",view->window()->devicePixelRatio());
+        return snapshot;
+    }
+    return {};
 }
 
 QJsonObject insertSceneImage(const QJsonObject &request)
@@ -1122,4 +1174,3 @@ extern "C" char *xovi_content_inserter_capabilities(const char *)
     qInfo("[xovi-content-inserter] capabilities request received");
     return response(capabilities());
 }
-

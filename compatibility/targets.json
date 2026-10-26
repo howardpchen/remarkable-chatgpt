@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "targets": {
+    "rm2": {
+      "product": "reMarkable 2",
+      "machine_token": "reMarkable 2",
+      "architecture": "armv7l",
+      "compiler_triplet_prefix": "arm",
+      "sdk_product": "rm2",
+      "install_releases": ["3.27.3.0"],
+      "status": "existing-prototype-only",
+      "note": "Preserves the existing installer gate; not a claim of new hardware validation. See VALIDATION.md."
+    },
+    "ferrari": {
+      "product": "reMarkable Paper Pro",
+      "machine_token": "ferrari",
+      "architecture": "aarch64",
+      "compiler_triplet_prefix": "aarch64",
+      "sdk_product": "ferrari",
+      "install_releases": [],
+      "status": "experimental-unvalidated"
+    },
+    "chiappa": {
+      "product": "reMarkable Paper Pro Move",
+      "machine_token": "chiappa",
+      "architecture": "aarch64",
+      "compiler_triplet_prefix": "aarch64",
+      "sdk_product": "chiappa",
+      "install_releases": [],
+      "status": "experimental-unvalidated"
+    }
+  }
+}

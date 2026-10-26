@@ -34,11 +34,13 @@ QMutex stateMutex;
 QString message = "ChatGPT";
 QPointer<QObject> originController, originView;
 QString originPage;
+QJsonObject originViewport;
 const QString base = "/home/root/.config/ink-diary";
 void state(const QString &text) { QMutexLocker lock(&stateMutex); message = text; }
 void require(bool valid, const char *why) { if (!valid) throw std::runtime_error(why); }
 
 QImage capture(const QString &path) {
+    require(diaryGuard(), "Cancelled or page changed");
     QFile::remove(path);
     QByteArray arg = (path + ",0,0").toUtf8();
     char *result = rm_shot$screenshotHandler(arg.data());
@@ -49,7 +51,10 @@ QImage capture(const QString &path) {
     for (int i=0; i<100; ++i) {
         require(diaryGuard(), "Cancelled or page changed");
         QThread::msleep(100);
+        require(diaryGuard(), "Cancelled or page changed");
         QImage image(path);
+        // The page can change while waiting for rm-shot or decoding its image.
+        require(diaryGuard(), "Cancelled or page changed");
         if (!image.isNull()) return image;
     }
     throw std::runtime_error("Screenshot timed out");
@@ -247,7 +252,8 @@ static bool diaryGuard() {
     runOnGuiSync([&] {
         auto now=findActivePage();
         valid=originController && originView && now.controller==originController.data()
-            && now.documentView==originView.data() && now.pageId==originPage;
+            && now.documentView==originView.data() && now.pageId==originPage
+            && !originViewport.isEmpty() && diaryViewportSnapshot()==originViewport;
     });
     if(!valid) cancelled=true;
     return valid;
@@ -259,9 +265,10 @@ extern "C" char *diary_start(const char *) {
     runOnGuiSync([&] {
         auto context=findActivePage();
         originController=context.controller; originView=context.documentView; originPage=context.pageId;
-        valid=originController && originView && !originPage.isEmpty();
+        originViewport=diaryViewportSnapshot();
+        valid=originController && originView && !originPage.isEmpty() && !originViewport.isEmpty();
     });
-    if(!valid) {busy=false; state("Open a notebook page first"); return response(QJsonObject{{"ok",false}});}
+    if(!valid) {busy=false; state("Open a notebook page with supported viewport mapping first"); return response(QJsonObject{{"ok",false}});}
     state("Starting...");
     std::thread(work).detach();
     return response(QJsonObject{{"ok",true}});

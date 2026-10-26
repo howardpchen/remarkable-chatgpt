@@ -1,6 +1,9 @@
 # Local builds and generated previews
 /build/
 /build-host/
+/bin/rm2/
+/bin/ferrari/
+/bin/chiappa/
 /*.png
 /*.s
 /core

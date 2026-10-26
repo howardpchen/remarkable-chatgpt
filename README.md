@@ -113,11 +113,13 @@ https://storage.googleapis.com/remarkable-codex-toolchain/3.27.0.97/rm2/remarkab
 
 ```sh
 export SDK_ENV=/absolute/path/to/sdk/environment-setup-cortexa7hf-neon-remarkable-linux-gnueabi
+export SDK_PRODUCT=rm2
+export SDK_RELEASE=3.27.3.0 # software release matched to this SDK, not its internal OS version
 export XOVI_REPO=/absolute/path/to/xovi
 ./build.sh
 ```
 
-Output: `bin/ink-diary.so` (ARMv7). Host checks require a C++ compiler and Qt6 Core/Gui development packages:
+Output: `bin/rm2/ink-diary.so` and `bin/rm2/config-model` (ARMv7), with checksummed build metadata. Existing bundled binaries are preserved. See [port preparation](docs/PORTING.md) for separate experimental `ferrari` and `chiappa` SDK targets; neither is installable until hardware validation. Host checks require a C++ compiler, Qt6 Core/Gui/Network development packages, Python 3 and Node.js:
 
 ```sh
 ./test.sh

@@ -2,6 +2,13 @@
 set -euo pipefail
 cd -- "$(dirname -- "$0")"
 mkdir -p build-host
+c++ -std=c++17 -fPIC tests/cancellation.cpp -o build-host/cancellation $(pkg-config --cflags --libs Qt6Network Qt6Core)
+./build-host/cancellation
+c++ -std=c++17 -fPIC tools/diagnostic/test-policy.cpp -o build-host/diagnostic-policy $(pkg-config --cflags --libs Qt6Core)
+./build-host/diagnostic-policy
+node tests/append.cjs
+node tests/viewport.cjs
+python3 tests/port-scripts.py
 c++ -std=c++17 -fPIC tests/core.cpp -o build-host/core $(pkg-config --cflags --libs Qt6Gui Qt6Core)
 QT_QPA_PLATFORM=offscreen ./build-host/core "$@"
 c++ -std=c++17 -fPIC tests/plot.cpp -o build-host/plot $(pkg-config --cflags --libs Qt6Gui Qt6Core)

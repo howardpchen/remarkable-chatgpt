@@ -54,7 +54,7 @@ Rectangle {
     property bool demoBusy: false
     property bool demoArmed: false
     property int requestsRemaining: 0
-    property bool dollarBudget: false
+    property bool tokenBudget: false
     property real budgetAvailable: 0
     property real budgetReservation: 0
     property bool budgetReady: false
@@ -64,7 +64,8 @@ Rectangle {
     property string localMessage: "Text · checking budget"
 
     function statusLabel() {
-        var budget = dollarBudget ? " · $" + budgetAvailable.toFixed(2) : "";
+        var credits = budgetAvailable >= 1000000 ? (Math.floor(budgetAvailable / 100000) / 10) + "M" : Math.floor(budgetAvailable / 1000) + "k";
+        var budget = tokenBudget ? " · " + credits + " credits" : "";
         if (localMessage.indexOf("inserted") >= 0) return "Done" + budget;
         if (localMessage.indexOf("Thinking") === 0) return "Thinking…";
         if (localMessage.indexOf("Live text test") === 0) return "Reading page…";
@@ -78,9 +79,9 @@ Rectangle {
         try {
             var result = JSON.parse(demoBroker.sendSimpleSignal("ink-diary-move-live$control", "status"));
             moveUiProbe.requestsRemaining = result.requestsRemaining || 0;
-            moveUiProbe.dollarBudget = typeof result.budgetTotalUsd === "number";
-            moveUiProbe.budgetAvailable = result.budgetAvailableUsd || 0;
-            moveUiProbe.budgetReservation = result.budgetReservationUsd || 0;
+            moveUiProbe.tokenBudget = typeof result.tokenCreditsTotal === "number";
+            moveUiProbe.budgetAvailable = result.tokenCreditsAvailable || 0;
+            moveUiProbe.budgetReservation = result.tokenCreditsReservedEach || 0;
             moveUiProbe.budgetReady = result.budgetReady === true;
             moveUiProbe.demoBusy = result.busy === true;
             moveUiProbe.demoArmed = result.canStart === true;
@@ -203,7 +204,7 @@ Rectangle {
             anchors.centerIn: parent
             font.pixelSize: 24
             color: (moveUiProbe.demoBusy || moveUiProbe.demoArmed) ? "white" : "black"
-            text: moveUiProbe.demoBusy ? "Cancel" : (moveUiProbe.demoArmed ? "Start" : (moveUiProbe.dollarBudget && moveUiProbe.budgetReady && moveUiProbe.budgetAvailable < moveUiProbe.budgetReservation ? "Budget reached" : "Setup needed"))
+            text: moveUiProbe.demoBusy ? "Cancel" : (moveUiProbe.demoArmed ? "Start" : (moveUiProbe.tokenBudget && moveUiProbe.budgetReady && moveUiProbe.budgetAvailable < moveUiProbe.budgetReservation ? "Budget reached" : "Setup needed"))
         }
 
         MouseArea {

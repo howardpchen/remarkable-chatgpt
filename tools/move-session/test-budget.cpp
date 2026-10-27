@@ -1,4 +1,4 @@
-#define INK_MOVE_DOLLAR_BUDGET
+#define INK_MOVE_TOKEN_BUDGET
 #include "quota.h"
 #include <QCoreApplication>
 #include <QTemporaryDir>
@@ -7,8 +7,8 @@
 #include <sys/wait.h>
 #include <iostream>
 void policy(const QString &root,int first=1) {
-    QFile p(root+"/budget-policy.json");assert(p.open(QIODevice::WriteOnly));
-    p.write(QJsonDocument(QJsonObject{{"schema",1},{"model","gpt-6-luna"},{"totalNanoUsd",double(moveSession::budgetTotal)},{"firstRequestId",first}}).toJson());
+    QFile p(root+"/token-budget-policy.json");assert(p.open(QIODevice::WriteOnly));
+    p.write(QJsonDocument(QJsonObject{{"schema",2},{"model","gpt-6-luna"},{"totalCredits",double(moveSession::budgetTotal/2)},{"firstRequestId",first}}).toJson());
     p.close();assert(p.setPermissions(QFileDevice::ReadOwner|QFileDevice::WriteOwner));
 }
 QJsonObject usage(int in,int out) {
@@ -17,11 +17,15 @@ QJsonObject usage(int in,int out) {
 int main(int argc,char **argv) {
     QCoreApplication app(argc,argv);QTemporaryDir temp;assert(temp.isValid());const auto root=temp.path();
     assert(moveSession::reserve(root).isEmpty());policy(root);
-    assert(moveSession::budgetStatus(root).available==5000000000LL);
+    assert(moveSession::budgetStatus(root).available==moveSession::budgetTotal);
     auto first=moveSession::reserve(root);assert(first==root+"/1");
     assert(moveSession::budgetStatus(root).available==moveSession::budgetTotal-moveSession::budgetReservation);
     moveSession::budgetSettle(root,first,usage(1000,100));
-    auto available=moveSession::budgetTotal-1000*moveSession::inputRate-100*moveSession::outputRate;
+    assert(moveSession::tokenCharge(1000,100)==3000); // 1000 + 5*100 credits
+    assert(moveSession::tokenCharge(272000,800)==552000); // threshold inclusive
+    assert(moveSession::tokenCharge(272001,800)==1100004); // 2x input / 1.5x output
+    assert(moveSession::budgetStatus(root).inputTokens==1000 && moveSession::budgetStatus(root).outputTokens==100);
+    auto available=moveSession::budgetTotal-moveSession::tokenCharge(1000,100);
     assert(moveSession::budgetStatus(root).available==available);
     moveSession::budgetSettle(root,first,usage(1,0)); // No repeated refund/overwrite.
     assert(moveSession::budgetStatus(root).available==available);
@@ -29,9 +33,9 @@ int main(int argc,char **argv) {
     invalid["model"]="unexpected-model";moveSession::budgetSettle(root,second,invalid);
     assert(moveSession::budgetStatus(root).available==available-moveSession::budgetReservation);
     invalid=usage(1000,100);invalid["usage"]=QJsonObject{{"input_tokens",0.5},{"output_tokens",1},{"total_tokens",1.5}};
-    moveSession::budgetSettle(root,second,invalid);assert(!QFile::exists(second+"/BUDGET_COST"));
-    moveSession::budgetSettle(root,second,usage(922001,800));assert(!QFile::exists(second+"/BUDGET_COST"));
-    invalid=usage(1000,100);invalid["service_tier"]="priority";moveSession::budgetSettle(root,second,invalid);assert(!QFile::exists(second+"/BUDGET_COST"));
+    moveSession::budgetSettle(root,second,invalid);assert(!QFile::exists(second+"/TOKEN_USAGE.json"));
+    moveSession::budgetSettle(root,second,usage(922001,800));assert(!QFile::exists(second+"/TOKEN_USAGE.json"));
+    invalid=usage(1000,100);invalid["service_tier"]="priority";moveSession::budgetSettle(root,second,invalid);assert(!QFile::exists(second+"/TOKEN_USAGE.json"));
     // Repeated low-usage requests continue well beyond three with no count cap.
     for(int i=3;i<=50;++i) {
         const auto path=moveSession::reserve(root);assert(path==root+"/"+QString::number(i));
@@ -47,7 +51,7 @@ int main(int argc,char **argv) {
     for(int i=0;i<32;++i) {int status;assert(::wait(&status)>0 && WIFEXITED(status));assert(WEXITSTATUS(status)==0 || WEXITSTATUS(status)==10);claims+=WEXITSTATUS(status)==10;}
     assert(claims==capacity && moveSession::remaining(root)==0 && moveSession::reserve(root).isEmpty());
     assert(moveSession::budgetStatus(root).available<moveSession::budgetReservation);
-    assert(QFile::exists(first+"/BUDGET_COST"));
+    assert(QFile::exists(first+"/TOKEN_USAGE.json"));
     QTemporaryDir historic;assert(QDir(historic.path()).mkdir("1") && QDir(historic.path()).mkdir("2"));
     policy(historic.path(),3);assert(moveSession::reserve(historic.path())==historic.path()+"/3");
     assert(moveSession::budgetStatus(historic.path()).available==moveSession::budgetTotal-moveSession::budgetReservation);

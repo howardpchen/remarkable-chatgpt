@@ -33,6 +33,11 @@ inline QJsonObject payload(const QImage &image) {
             {"required",QJsonArray{"kind","text"}},{"additionalProperties",false}}}};
     return {{"model",model},{"store",false},{"max_output_tokens",outputTokens},
         {"service_tier","default"},
+#ifdef INK_MOVE_TOKEN_BUDGET
+        // Explicit-only mode with no breakpoints disables cache reads/writes;
+        // fixed standard input/output token weights then apply directly.
+        {"prompt_cache_options",QJsonObject{{"mode","explicit"}}},
+#endif
         {"reasoning",QJsonObject{{"effort","none"}}},
         {"instructions","Read the latest unanswered handwritten question. Earlier writing may contain prior answers. "
             "Give a concise ordinary text answer in the question's language, usually under 100 words. "

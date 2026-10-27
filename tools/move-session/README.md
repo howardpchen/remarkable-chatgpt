@@ -6,7 +6,7 @@ uses a single capture. Blank, Dots small and Grid small are in scope, portrait a
 normal zoom, on the exact reviewed OS 3.28.0.172 / Qt 6.10.3 setup. Both small
 templates passed real recognition and placement without overlap, plus owner
 Undo/Redo/close-reopen. Two requests consumed two slots, with one slot unused;
-the historical build retains its three-slot quota. The optional token-budget
+the historical build retains its three-slot quota. The optional dollar-budget
 build below replaces that counter only after explicit provisioning. Keep the page still
 while thinking because single capture cannot detect new ink on that same page.
 The historical shutdown crash remains unexplained despite later clean restarts.
@@ -18,64 +18,56 @@ accepted cases above, not for arbitrary templates, zoom or general answer qualit
  The owner accepted v2's answer, Undo, Redo and reopen behavior. Its binary,
 QMD and consumed markers remain the validated baseline; never reset its runs.
 
-## Fixed-price token-credit personal beta
+## Non-renewing $5 personal-beta build
 
-Build with `TOKEN_BUDGET=1 SINGLE_CAPTURE=1` and the exact SDK variables below.
-The result goes to `build/move-session-single-capture-budget`. The owner-approved
-$5 is provisioned **once** as **50 million standard-input-equivalent credits**.
-Prices are assumed fixed during this usage period. This is a local token allowance,
-not an account-wide/provider billing cap. There is no separate request-count limit.
+Build with `DOLLAR_BUDGET=1 SINGLE_CAPTURE=1` in addition to the exact SDK variables
+below. The result goes to `build/move-session-single-capture-budget`. This is an
+**application-local conservative spending guard**, not a provider-enforced billing
+cap and not a limit on other clients using the same account. No independent
+request-count limit applies; the fixed model, 800-output-token bound, explicit
+Start, one active request, capture/native/placement guards and no retries remain.
+The widget uses concise idle/completion text, a remaining-budget line and a single
+Start/Cancel button; actionable errors and unsupported-answer notices stay visible.
 
-At the verified standard Luna rates ($0.10/M input and $0.50/M output), normal
-requests consume **input tokens + 5 × output tokens** credits. Image input is
-included in the provider's input-token usage. Above 272,000 input tokens, the
-published long-context surcharge changes this to **2 × input + 7.5 × output**.
-Half-credit integer ticks preserve exact accounting without floating-point money.
-The request pins the default service tier on the global `api.openai.com` endpoint.
-It sets `prompt_cache_options.mode=explicit` with no breakpoints, so prompt caching
-creates no cache writes or reads; cache price categories cannot complicate the
-1/5 rule. There are no tools, regional endpoint, prior response or conversation.
-
-Sources checked 2026-10-27:
-[model pricing/limits](https://developers.openai.com/api/docs/models/gpt-6-luna),
-[explicit-only caching behavior](https://developers.openai.com/api/docs/guides/prompt-caching).
-The fixed model, 800 output tokens, explicit Start, one active request, capture/
-native/placement guards and no automatic retries remain unchanged. The compact
-widget shows credits remaining with short status text and one Start/Cancel button;
-actionable errors and unsupported-answer notices stay visible.
-
-Provision a private owner-only `token-budget-policy.json` (0600) in the existing
-private run root only once, under deployment authority:
+Provision a private owner-only `budget-policy.json` (0600) in the existing private
+run root, only once under deployment authority, with this schema:
 
 ```json
-{"schema":2,"model":"gpt-6-luna","totalCredits":50000000,"firstRequestId":3}
+{"schema":1,"model":"gpt-6-luna","totalNanoUsd":5000000000,"firstRequestId":3}
 ```
 
 `firstRequestId` must be the next unused identity after preserved, separately
 funded historical test directories. Never move it forward to refill a budget.
-Missing/invalid policy fails closed in this build, with no three-slot fallback.
-A private-root exclusive flock serializes scanning, reservation and settlement.
-Each new numbered directory durably reserves **1,850,000 credits** before capture
-or POST: the documented 922,000-input-token maximum at long-context pricing plus
-800 output tokens. A failed/cancelled/uncertain attempt keeps that reservation.
-No automatic refill, recurring renewal, reset command or retry exists. A small
-unspendable remainder may remain when it cannot cover another full reservation.
+Missing/invalid policy fails closed in this build, never falling back to three
+free attempts. A private-root exclusive flock serializes scans, reservations and
+settlements. Each new numbered directory durably reserves **$0.25421 before any
+capture or POST**. A failed/cancelled/uncertain attempt keeps this reservation.
+There is no auto-refill, recurring renewal, reset command or retry.
 
-Only a matching-model/default-tier response with valid bounded integral input,
-output and total usage can create an exclusive synced `TOKEN_USAGE.json`. It stores
-**only the token counts**, never currency, prompts or answers. The fixed token
-weights are applied to these counts and unused reserved credits released. Repeated
-settlement cannot refund twice; missing/invalid usage stays conservatively reserved.
-Status exposes counted input/output tokens and unresolved reservations separately.
-Prior directories/markers remain untouched, and all allowance state survives reloads.
-Do not delete ledger directories or alter policy to regain credits. A `BUDGET_HALTED`
-entry suspends future reservations without erasing data.
+Pricing was verified on 2026-10-27 against the
+[official Luna page](https://developers.openai.com/api/docs/models/gpt-6-luna):
+$0.10/M input, $0.50/M output, maximum 922,000 input tokens. Integer nano-dollar
+accounting deliberately charges all input at $0.275/M and output at $0.825/M,
+covering the documented long-context, cache-write and regional adjustments without
+assuming an image-token multiplier or claiming cached-input discounts. Requests
+explicitly select the default service tier and have no tools or conversation state.
+Before dispatch, enough budget must remain for the full worst-case reservation;
+a small unspendable remainder can therefore remain at exhaustion.
 
-Tests cover both pricing regimes and their boundary, actual input/output totals,
-valid/invalid/missing usage, duplicate settlement, >3 successful identities,
-concurrent exhaustion, historical records, reload, unsafe paths, UI labels, and
-actual runtime refusal to dispatch after exhaustion. This allowance excludes
-other applications and assumes the documented prices remain fixed as authorized.
+Only a matching model/default-tier response with valid integral bounded input,
+output and total token usage can create an exclusive, synced `BUDGET_COST` record.
+That verified conservative cost releases the unused reservation; duplicate
+settlement cannot refund twice. Missing/unrecognized usage retains the full cost.
+All prior directories/markers remain unchanged and the budget survives reloads.
+`budgetAvailableUsd` includes reservations and uses conservative rates; it is not
+an invoice or an actual-spend claim. Recheck pricing before adopting future rate
+changes; this local mechanism cannot enforce an account-wide cap or provider price
+changes. Do not delete ledger directories or change policy to regain allowance.
+A `BUDGET_HALTED` entry provides fail-closed manual suspension without erasing data.
+
+Tests cover valid/invalid/missing usage, duplicate settlement, >3 successful
+identities, concurrent exhaustion, historical records, reload, unsafe paths, UI
+labels, and the actual runtime's refusal to dispatch after budget exhaustion.
 
 ## Deliberate requests and bounded usage (historical three-slot build)
 

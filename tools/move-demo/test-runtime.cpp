@@ -49,9 +49,9 @@ struct RuntimeTest {
 }
 int main(int argc,char **argv) {
     QGuiApplication app(argc,argv);
-#ifdef INK_MOVE_TOKEN_BUDGET
-    QFile policy(workflow::sessionRoot+"/token-budget-policy.json");assert(policy.open(QIODevice::WriteOnly));
-    policy.write("{\"schema\":2,\"model\":\"gpt-6-luna\",\"totalCredits\":50000000,\"firstRequestId\":1}");
+#ifdef INK_MOVE_DOLLAR_BUDGET
+    QFile policy(workflow::sessionRoot+"/budget-policy.json");assert(policy.open(QIODevice::WriteOnly));
+    policy.write("{\"schema\":1,\"model\":\"gpt-6-luna\",\"totalNanoUsd\":5000000000,\"firstRequestId\":1}");
     policy.close();assert(policy.setPermissions(QFileDevice::ReadOwner|QFileDevice::WriteOwner));
 #endif
 #ifdef INK_MOVE_PER_REQUEST
@@ -96,13 +96,7 @@ int main(int argc,char **argv) {
 #endif
     reference.close();
     assert(reference.setPermissions(QFileDevice::ReadOwner|QFileDevice::WriteOwner));
-    const QString requestedScenario=argc>1?QString::fromLocal8Bit(argv[1]):"success";
-    const QString scenario=requestedScenario=="success-usage"?"success":requestedScenario;
-#ifdef INK_MOVE_TOKEN_BUDGET
-    const bool withUsage=requestedScenario=="success-usage";
-#else
-    const bool withUsage=false;
-#endif
+    const QString scenario=argc>1?QString::fromLocal8Bit(argv[1]):"success";
     int captures=0,nativeChecks=0;
     bool captureVisible=false;
     QImage image(954,1696,QImage::Format_RGB32); image.fill(Qt::white); image.setPixelColor(400,160,Qt::black);
@@ -126,14 +120,6 @@ int main(int argc,char **argv) {
     };
 #ifdef INK_MOVE_LIVE_TEST
     LiveMockManager manager;
-#ifdef INK_MOVE_TOKEN_BUDGET
-    if(withUsage) {
-        auto response=QJsonDocument::fromJson(manager.response).object();
-        response.insert("model","gpt-6-luna");response.insert("service_tier","default");
-        response.insert("usage",QJsonObject{{"input_tokens",1000},{"output_tokens",100},{"total_tokens",1100}});
-        manager.response=QJsonDocument(response).toJson();
-    }
-#endif
     if(scenario=="malformed") manager.response="not json";
     if(scenario=="needs-web") manager.response=mockAnswer("synthetic-private-question","needs_web");
     if(scenario=="clarification") manager.response=mockAnswer("synthetic-private-question","clarification");
@@ -232,7 +218,7 @@ int main(int argc,char **argv) {
         moveDemo::Runtime reloaded(&app);
         moveDemo::RuntimeTest::setup(reloaded,[]{return QString();});moveDemo::RuntimeTest::live(reloaded,&manager);
         #ifdef INK_MOVE_PER_REQUEST
-        assert(moveSession::remaining(workflow::sessionRoot)==initialAllowance-(withUsage?0:1));
+        assert(moveSession::remaining(workflow::sessionRoot)==initialAllowance-1);
 #else
         assert(!reloaded.status()["canStart"].toBool());reloaded.start();assert(!reloaded.status()["busy"].toBool());
 #endif
@@ -277,14 +263,6 @@ int main(int argc,char **argv) {
 #ifdef INK_MOVE_LIVE_TEST
     const bool apiExpected=scenario=="success" || scenario=="translated-before-start" || scenario=="dots-before-start" || scenario=="grid-before-start" || scenario=="same-page-ink" || scenario=="changed-pixels" || scenario=="malformed" || scenario=="unsupported" || scenario=="needs-web" || scenario=="clarification" || scenario=="unknown-kind" || scenario=="too-large" || scenario=="http-error" || scenario=="api-timeout" || scenario.endsWith("-api");
     assert(manager.requests==(apiExpected?1:0));
-#ifdef INK_MOVE_TOKEN_BUDGET
-    if(manager.requests>0) {
-        const auto sent=QJsonDocument::fromJson(manager.sent).object();
-        assert(sent.value("service_tier")=="default");
-        assert(sent.value("prompt_cache_options").toObject().value("mode")=="explicit");
-        assert(!sent.contains("prompt_cache_breakpoint"));
-    }
-#endif
     if(scenario=="shutdown-api" || scenario=="cancel-api" || scenario=="api-timeout" || scenario.endsWith("change-api"))assert(manager.aborts==1);
 #endif
     const auto terminalMessage=runtime.status()["message"].toString();
@@ -306,7 +284,7 @@ int main(int argc,char **argv) {
     }
 #endif
 #ifdef INK_MOVE_PER_REQUEST
-    assert(moveSession::remaining(workflow::sessionRoot)==initialAllowance-(withUsage?0:1));
+    assert(moveSession::remaining(workflow::sessionRoot)==initialAllowance-1);
     if(scenario=="success" || scenario=="http-error" || scenario=="cancel") {
         QFile profileBefore(workflow::sessionRoot+referenceName);assert(profileBefore.open(QIODevice::ReadOnly));
         const auto originalProfile=profileBefore.readAll();profileBefore.close();
@@ -320,16 +298,10 @@ int main(int argc,char **argv) {
             assert(QTest::qWaitFor([&]{return !runtime.status()["busy"].toBool();},6000));
         }
         assert(profileBefore.open(QIODevice::ReadOnly));assert(profileBefore.readAll()==originalProfile);profileBefore.close();
-#ifdef INK_MOVE_TOKEN_BUDGET
+#ifdef INK_MOVE_DOLLAR_BUDGET
         // Three requests do not exhaust the new guard. Consume the remainder
         // without networking to verify runtime blocks the next dispatch/reload.
         assert(runtime.status()["requestsRemaining"].toInt()==-1);
-        if(withUsage) {
-            assert(runtime.status()["inputTokensCounted"].toInt()==3000);
-            assert(runtime.status()["outputTokensCounted"].toInt()==300);
-            assert(runtime.status()["tokenCreditsAvailable"].toDouble()==50000000-4500);
-            assert(runtime.status()["uncertainRequests"].toInt()==0);
-        }
         assert(moveSession::remaining(workflow::sessionRoot)>0);
         while(!moveSession::reserve(workflow::sessionRoot).isEmpty()) {}
 #endif

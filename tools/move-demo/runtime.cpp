@@ -129,15 +129,12 @@ public:
             #endif
             {"stage",int(stage_)},{"attemptConsumed",QFile::exists(workflow::base+"/START_CONSUMED")},
             {"insertionAttempted",workflow::phase==workflow::Phase::Consumed}};
-#ifdef INK_MOVE_TOKEN_BUDGET
+#ifdef INK_MOVE_DOLLAR_BUDGET
         const auto budget=moveSession::budgetStatus(workflow::sessionRoot);
-        result.insert("tokenCreditsTotal",double(moveSession::budgetTotal)/2);
-        result.insert("tokenCreditsAvailable",double(budget.available)/2);
+        result.insert("budgetTotalUsd",5.0);
+        result.insert("budgetAvailableUsd",double(budget.available)/1e9);
         result.insert("budgetReady",budget.ok);
-        result.insert("tokenCreditsReservedEach",double(moveSession::budgetReservation)/2);
-        result.insert("inputTokensCounted",double(budget.inputTokens));
-        result.insert("outputTokensCounted",double(budget.outputTokens));
-        result.insert("uncertainRequests",budget.uncertainRequests);
+        result.insert("budgetReservationUsd",double(moveSession::budgetReservation)/1e9);
         result.insert("requestsRemaining",-1); // No independent request-count cap.
 #endif
         return result;
@@ -304,7 +301,7 @@ private:
 #endif
             stage_=Stage::AwaitAnswer; message_="Thinking; Cancel available";
             client_=new moveLive::Client(this);
-#ifdef INK_MOVE_TOKEN_BUDGET
+#ifdef INK_MOVE_DOLLAR_BUDGET
             const auto reservedPath=workflow::base;
             client_->usageObserver=[reservedPath](const QJsonObject &response) {
                 moveSession::budgetSettle(workflow::sessionRoot,reservedPath,response);

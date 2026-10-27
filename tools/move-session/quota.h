@@ -17,12 +17,12 @@ inline int openRoot(const QString &root) {
     return fd;
 }
 }
-#ifdef INK_MOVE_TOKEN_BUDGET
+#ifdef INK_MOVE_DOLLAR_BUDGET
 #include "budget.h"
 #endif
 namespace moveSession {
 inline int remaining(const QString &root) {
-#ifdef INK_MOVE_TOKEN_BUDGET
+#ifdef INK_MOVE_DOLLAR_BUDGET
     const auto s=budgetStatus(root);return s.ok?int(s.available/budgetReservation):0;
 #else
     int fd=openRoot(root);if(fd<0)return 0;
@@ -35,7 +35,7 @@ inline int remaining(const QString &root) {
 #endif
 }
 inline QString reserve(const QString &root) {
-#ifdef INK_MOVE_TOKEN_BUDGET
+#ifdef INK_MOVE_DOLLAR_BUDGET
     return budgetReserve(root);
 #else
     int fd=openRoot(root);if(fd<0)return {};

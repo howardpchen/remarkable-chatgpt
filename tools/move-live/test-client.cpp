@@ -28,6 +28,7 @@ int main(int argc,char **argv) {
     // Exact multimodal contract, no server tools or state, bounded model/output.
     const auto body=moveLive::payload(image);
     assert(body["model"]==model && body["store"]==false && body["max_output_tokens"]==800);
+    assert(body["service_tier"]=="default");
     assert(body["reasoning"].toObject()["effort"]=="none");
     assert(!body.contains("tools") && !body.contains("previous_response_id"));
     const auto format=body["text"].toObject()["format"].toObject();
@@ -41,6 +42,8 @@ int main(int argc,char **argv) {
     for(const auto scenario:{"success","immediate","invalid-before","invalid-after","timeout","http","unauthorized","rate-limit","server-error","dns","tls","closed","oversize","refusal","incomplete","schema","needs-web","clarification","unsupported","cancel","destroy"}) {
         LiveMockManager manager;bool valid=true,called=false;QString text,error;
         auto *client=new Client(&app);
+        int usageCalls=0;
+        client->usageObserver=[&](const QJsonObject &){++usageCalls;};
         if(QString(scenario)=="immediate")manager.delay=-2;
         if(QString(scenario)=="timeout" || QString(scenario)=="cancel" || QString(scenario)=="destroy")manager.delay=-1;
         if(QString(scenario)=="invalid-before")valid=false;
@@ -65,6 +68,8 @@ int main(int argc,char **argv) {
             QTest::qWait(70);assert(!called && manager.aborts==1);
         } else {
             assert(QTest::qWaitFor([&]{return called;},1000));
+            const bool usageExpected=QString(scenario)=="success" || QString(scenario)=="immediate" || QString(scenario)=="refusal" || QString(scenario)=="incomplete" || QString(scenario)=="schema" || QString(scenario)=="needs-web" || QString(scenario)=="clarification" || QString(scenario)=="unsupported";
+            assert(usageCalls==(usageExpected?1:0));
             const bool success=QString(scenario)=="success" || QString(scenario)=="immediate";
             assert(success ? (!text.isEmpty() && error.isEmpty()) : (text.isEmpty() && !error.isEmpty()));
             if(QString(scenario)=="needs-web")assert(error=="Needs web access; search is off.");

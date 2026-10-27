@@ -109,7 +109,7 @@ public:
 #endif
     }
     QJsonObject status() const {
-        return {{"ok",true},{"busy",busy_},{"message",message_},{"offlineFixture",
+        QJsonObject result= {{"ok",true},{"busy",busy_},{"message",message_},{"offlineFixture",
 #ifdef INK_MOVE_LIVE_TEST
             false
 #else
@@ -129,6 +129,15 @@ public:
             #endif
             {"stage",int(stage_)},{"attemptConsumed",QFile::exists(workflow::base+"/START_CONSUMED")},
             {"insertionAttempted",workflow::phase==workflow::Phase::Consumed}};
+#ifdef INK_MOVE_DOLLAR_BUDGET
+        const auto budget=moveSession::budgetStatus(workflow::sessionRoot);
+        result.insert("budgetTotalUsd",5.0);
+        result.insert("budgetAvailableUsd",double(budget.available)/1e9);
+        result.insert("budgetReady",budget.ok);
+        result.insert("budgetReservationUsd",double(moveSession::budgetReservation)/1e9);
+        result.insert("requestsRemaining",-1); // No independent request-count cap.
+#endif
+        return result;
     }
     void start() {
         #ifdef INK_MOVE_PER_REQUEST
@@ -170,7 +179,7 @@ public:
 #endif // The one-shot build retains its old per-page reference contract.
 #ifdef INK_MOVE_PER_REQUEST
         const auto requestDir=moveSession::reserve(workflow::sessionRoot);
-        if(requestDir.isEmpty()) {stop("Request quota exhausted or unavailable");return;}
+        if(requestDir.isEmpty()) {stop("Request budget/quota exhausted or unavailable");return;}
         workflow::base=requestDir;
         qInfo("ink-move lifecycle request-reserved");
 #endif
@@ -292,6 +301,12 @@ private:
 #endif
             stage_=Stage::AwaitAnswer; message_="Thinking; Cancel available";
             client_=new moveLive::Client(this);
+#ifdef INK_MOVE_DOLLAR_BUDGET
+            const auto reservedPath=workflow::base;
+            client_->usageObserver=[reservedPath](const QJsonObject &response) {
+                moveSession::budgetSettle(workflow::sessionRoot,reservedPath,response);
+            };
+#endif
             client_->start(workflow::question,key_,[this]{return liveValid();},
                 [this](QString text,QString error) {
                     if(!busy_ || stage_!=Stage::AwaitAnswer)return;

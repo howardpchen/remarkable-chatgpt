@@ -7,11 +7,17 @@ if [[ "${SINGLE_CAPTURE:-0}" == 1 ]]; then
     out="$PWD/build/move-session-single-capture-host"
     trial_flags=(-DINK_MOVE_SINGLE_CAPTURE)
 fi
+if [[ "${DOLLAR_BUDGET:-0}" == 1 ]]; then
+    out="$out-budget"
+    trial_flags+=(-DINK_MOVE_DOLLAR_BUDGET)
+fi
 mkdir -p "$out"
 "$(pkg-config --variable=libexecdir Qt6Core)/moc" tools/move-demo/test-runtime.cpp -o "$out/test-runtime.moc"
 c++ "${trial_flags[@]}" -std=c++17 -fPIC -DINK_DIARY_EXPERIMENTAL_MOVE -DINK_MOVE_LIVE_TEST -DINK_MOVE_PER_REQUEST tools/move-demo/test-runtime.cpp -I"$out" -o "$out/test-runtime" $(pkg-config --cflags --libs Qt6Quick Qt6Qml Qt6Gui Qt6Core Qt6Network Qt6Test) -ldl
 c++ -std=c++17 -fPIC tools/move-session/test-quota.cpp -o "$out/test-quota" $(pkg-config --cflags --libs Qt6Core)
 "$out/test-quota"
+c++ -std=c++17 -fPIC tools/move-session/test-budget.cpp -o "$out/test-budget" $(pkg-config --cflags --libs Qt6Core)
+"$out/test-budget"
 c++ -std=c++17 -fPIC -DINK_MOVE_PER_REQUEST tools/move-session/test-page-profile.cpp -o "$out/test-page-profile" $(pkg-config --cflags --libs Qt6Gui Qt6Core)
 "$out/test-page-profile"
 c++ -std=c++17 -fPIC tools/move-session/test-template-ink.cpp -o "$out/test-template-ink" $(pkg-config --cflags --libs Qt6Gui Qt6Core)

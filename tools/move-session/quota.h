@@ -16,7 +16,15 @@ inline int openRoot(const QString &root) {
     if(fd>=0 && (::fstat(fd,&st)!=0 || st.st_uid!=::geteuid() || (st.st_mode&0777)!=0700)) {::close(fd);fd=-1;}
     return fd;
 }
+}
+#ifdef INK_MOVE_DOLLAR_BUDGET
+#include "budget.h"
+#endif
+namespace moveSession {
 inline int remaining(const QString &root) {
+#ifdef INK_MOVE_DOLLAR_BUDGET
+    const auto s=budgetStatus(root);return s.ok?int(s.available/budgetReservation):0;
+#else
     int fd=openRoot(root);if(fd<0)return 0;
     int free=0;
     for(int i=1;i<=maxAttempts;++i) {
@@ -24,8 +32,12 @@ inline int remaining(const QString &root) {
         if(::fstatat(fd,QByteArray::number(i).constData(),&st,AT_SYMLINK_NOFOLLOW)!=0 && errno==ENOENT)++free;
     }
     ::close(fd);return free;
+#endif
 }
 inline QString reserve(const QString &root) {
+#ifdef INK_MOVE_DOLLAR_BUDGET
+    return budgetReserve(root);
+#else
     int fd=openRoot(root);if(fd<0)return {};
     QString path;
     for(int i=1;i<=maxAttempts;++i) {
@@ -39,5 +51,6 @@ inline QString reserve(const QString &root) {
         if(errno!=EEXIST)break;
     }
     ::close(fd);return path;
+#endif
 }
 }

@@ -49,20 +49,39 @@ Rectangle {
     visible: !dismissedUntilToolbar && !diaryCaptureSuppressed && parent !== null && parent.documentLoaded === true && parent.width >= 320 && parent.height >= 352
     color: "white"
     border.color: "black"
-    border.width: 2
-    radius: 8
+    border.width: 1
+    radius: 12
     property bool demoBusy: false
     property bool demoArmed: false
     property int requestsRemaining: 0
+    property bool dollarBudget: false
+    property real budgetAvailable: 0
+    property real budgetReservation: 0
+    property bool budgetReady: false
     clip: true
     XoviMessageBroker { id: demoBroker }
     property int clicks: 0
-    property string localMessage: "Text · 3-request quota"
+    property string localMessage: "Text · checking budget"
+
+    function statusLabel() {
+        var budget = dollarBudget ? " · $" + budgetAvailable.toFixed(2) : "";
+        if (localMessage.indexOf("inserted") >= 0) return "Done" + budget;
+        if (localMessage.indexOf("Thinking") === 0) return "Thinking…";
+        if (localMessage.indexOf("Live text test") === 0) return "Reading page…";
+        if (localMessage.indexOf("Cancelled;") === 0) return "Cancelled" + budget;
+        if (localMessage.indexOf("Ready") === 0 || localMessage.indexOf("Text · checking") === 0 || localMessage.indexOf("Normal zoom:") === 0)
+            return "AI" + budget;
+        return localMessage; // Preserve actionable errors and unsupported notices.
+    }
 
     function refreshStatus() {
         try {
             var result = JSON.parse(demoBroker.sendSimpleSignal("ink-diary-move-live$control", "status"));
             moveUiProbe.requestsRemaining = result.requestsRemaining || 0;
+            moveUiProbe.dollarBudget = typeof result.budgetTotalUsd === "number";
+            moveUiProbe.budgetAvailable = result.budgetAvailableUsd || 0;
+            moveUiProbe.budgetReservation = result.budgetReservationUsd || 0;
+            moveUiProbe.budgetReady = result.budgetReady === true;
             moveUiProbe.demoBusy = result.busy === true;
             moveUiProbe.demoArmed = result.canStart === true;
             moveUiProbe.localMessage = result.message || result.error || "Text answer unavailable";
@@ -162,7 +181,7 @@ Rectangle {
         height: 60
         font.pixelSize: 22
         wrapMode: Text.WordWrap
-        text: moveUiProbe.localMessage
+        text: moveUiProbe.statusLabel()
         color: "black"
     }
 
@@ -174,17 +193,17 @@ Rectangle {
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         anchors.margins: 12
-        height: 76
-        color: "white"
+        height: 68
+        color: (moveUiProbe.demoBusy || moveUiProbe.demoArmed) ? "black" : "white"
         border.color: "black"
-        border.width: 2
-        radius: 6
+        border.width: 1
+        radius: 10
 
         Text {
             anchors.centerIn: parent
             font.pixelSize: 24
-            color: "black"
-            text: moveUiProbe.demoBusy ? "Cancel text answer" : (moveUiProbe.demoArmed ? "Start · " + moveUiProbe.requestsRemaining + " left" : (moveUiProbe.requestsRemaining <= 0 ? "Test limit reached" : "Device setup required"))
+            color: (moveUiProbe.demoBusy || moveUiProbe.demoArmed) ? "white" : "black"
+            text: moveUiProbe.demoBusy ? "Cancel" : (moveUiProbe.demoArmed ? "Start" : (moveUiProbe.dollarBudget && moveUiProbe.budgetReady && moveUiProbe.budgetAvailable < moveUiProbe.budgetReservation ? "Budget reached" : "Setup needed"))
         }
 
         MouseArea {

@@ -79,6 +79,14 @@ int main(int argc,char **argv) {
             assert(statusText->property("contentHeight").toReal()<=statusText->height());
         }
     }
+    panel->setProperty("dollarBudget",true);
+    panel->setProperty("budgetAvailable",5.0);
+    panel->setProperty("localMessage","Normal zoom: Blank, Dots small or Grid small");
+    QCoreApplication::processEvents();
+    assert(statusText->property("text").toString()=="AI · $5.00");
+    panel->setProperty("localMessage","Live text inserted (single capture); verify placement and Undo/Redo");
+    QCoreApplication::processEvents();assert(statusText->property("text").toString()=="Done · $5.00");
+    panel->setProperty("dollarBudget",false);
     root->setProperty("toolbarVisibleSetting",true);
 #endif
 

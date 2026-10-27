@@ -48,7 +48,16 @@ struct RuntimeTest {
 };
 }
 int main(int argc,char **argv) {
-    QGuiApplication app(argc,argv); QQmlEngine engine; QQuickWindow window;
+    QGuiApplication app(argc,argv);
+#ifdef INK_MOVE_DOLLAR_BUDGET
+    QFile policy(workflow::sessionRoot+"/budget-policy.json");assert(policy.open(QIODevice::WriteOnly));
+    policy.write("{\"schema\":1,\"model\":\"gpt-6-luna\",\"totalNanoUsd\":5000000000,\"firstRequestId\":1}");
+    policy.close();assert(policy.setPermissions(QFileDevice::ReadOwner|QFileDevice::WriteOwner));
+#endif
+#ifdef INK_MOVE_PER_REQUEST
+    const int initialAllowance=moveSession::remaining(workflow::sessionRoot);
+#endif
+    QQmlEngine engine; QQuickWindow window;
     window.resize(954,1696);
     QQmlComponent rootComponent(&engine);
     rootComponent.setData("import QtQuick 2.15\nItem { width:954; height:1696; property bool documentLoaded:true; property QtObject document; property QtObject sceneController; property int currentPage:0; property string currentPageId:'synthetic-page' }",QUrl());
@@ -165,7 +174,7 @@ int main(int argc,char **argv) {
         if(scenario=="template-before-start")document.name="Dots";
         runtime.start();
         assert(!runtime.status()["busy"].toBool() && controller.calls==0 && manager.requests==0 && captures==0);
-        assert(runtime.status()["requestsRemaining"].toInt()==3);
+        assert(moveSession::remaining(workflow::sessionRoot)==initialAllowance);
         assert(!QFile::exists(workflow::sessionRoot+"/1"));
         std::cout<<"PASS automatic Start refusal before request allocation: "<<scenario.toStdString()<<"\n";
         delete panel;view.setParentItem(nullptr);delete root;return 0;
@@ -209,7 +218,7 @@ int main(int argc,char **argv) {
         moveDemo::Runtime reloaded(&app);
         moveDemo::RuntimeTest::setup(reloaded,[]{return QString();});moveDemo::RuntimeTest::live(reloaded,&manager);
         #ifdef INK_MOVE_PER_REQUEST
-        assert(reloaded.status()["requestsRemaining"].toInt()==2);
+        assert(moveSession::remaining(workflow::sessionRoot)==initialAllowance-1);
 #else
         assert(!reloaded.status()["canStart"].toBool());reloaded.start();assert(!reloaded.status()["busy"].toBool());
 #endif
@@ -275,7 +284,7 @@ int main(int argc,char **argv) {
     }
 #endif
 #ifdef INK_MOVE_PER_REQUEST
-    assert(runtime.status()["requestsRemaining"].toInt()==2);
+    assert(moveSession::remaining(workflow::sessionRoot)==initialAllowance-1);
     if(scenario=="success" || scenario=="http-error" || scenario=="cancel") {
         QFile profileBefore(workflow::sessionRoot+referenceName);assert(profileBefore.open(QIODevice::ReadOnly));
         const auto originalProfile=profileBefore.readAll();profileBefore.close();
@@ -289,7 +298,14 @@ int main(int argc,char **argv) {
             assert(QTest::qWaitFor([&]{return !runtime.status()["busy"].toBool();},6000));
         }
         assert(profileBefore.open(QIODevice::ReadOnly));assert(profileBefore.readAll()==originalProfile);profileBefore.close();
-        assert(runtime.status()["requestsRemaining"].toInt()==0);
+#ifdef INK_MOVE_DOLLAR_BUDGET
+        // Three requests do not exhaust the new guard. Consume the remainder
+        // without networking to verify runtime blocks the next dispatch/reload.
+        assert(runtime.status()["requestsRemaining"].toInt()==-1);
+        assert(moveSession::remaining(workflow::sessionRoot)>0);
+        while(!moveSession::reserve(workflow::sessionRoot).isEmpty()) {}
+#endif
+        assert(moveSession::remaining(workflow::sessionRoot)==0);
         const auto requests=manager.requests, inserts=controller.calls;
         runtime.start();QTest::qWait(50);
         assert(!runtime.status()["busy"].toBool() && manager.requests==requests && controller.calls==inserts);

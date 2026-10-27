@@ -32,6 +32,7 @@ inline QJsonObject payload(const QImage &image) {
         {"schema",QJsonObject{{"type","object"},{"properties",fields},
             {"required",QJsonArray{"kind","text"}},{"additionalProperties",false}}}};
     return {{"model",model},{"store",false},{"max_output_tokens",outputTokens},
+        {"service_tier","default"},
         {"reasoning",QJsonObject{{"effort","none"}}},
         {"instructions","Read the latest unanswered handwritten question. Earlier writing may contain prior answers. "
             "Give a concise ordinary text answer in the question's language, usually under 100 words. "
@@ -95,6 +96,7 @@ inline QString transportFailure(int status,QNetworkReply::NetworkError networkEr
 // retries, redirect following, insecure TLS fallback, or notebook persistence.
 class Client final : public QObject {
 public:
+    std::function<void(const QJsonObject &)> usageObserver;
     using Done=std::function<void(QString,QString)>;
     explicit Client(QObject *parent):QObject(parent) {
         timeout_.setSingleShot(true);
@@ -160,6 +162,7 @@ private:
         try {
             QJsonParseError error;const auto doc=QJsonDocument::fromJson(bytes_,&error);
             if(error.error!=QJsonParseError::NoError || !doc.isObject())throw std::runtime_error("Invalid API JSON");
+            if(usageObserver)usageObserver(doc.object());
             const auto answer=parse(doc.object());
             finish(answer.text,answer.notice);
         } catch(const std::exception &e) {finish({},QString::fromUtf8(e.what()));}

@@ -27,7 +27,7 @@ Status as of **2026-10-27**:
 | --- | --- | --- |
 | reMarkable 2 | Existing OS 3.27.3.0 prototype; see [validation history](VALIDATION.md) | Version 4.1 manual prototype bundle; [installation guide](INSTALL.md) applies only to this exact target |
 | Paper Pro Move (`chiappa`) | Exact OS 3.28.0.172 / Qt 6.10.3 SDK build; real screenshots; bounded offline capture/render/insertion with owner-confirmed placement, Undo/Redo and reopen persistence; deployed widget behavior accepted by owner | Narrow personal beta accepted for Blank, Dots small and Grid small at normal portrait zoom; live placement and owner Undo/Redo/reopen verified; production installer/support disabled |
-| Full-size Paper Pro (`ferrari`) | Build-target preparation; independent device validation pending | Production installer/support disabled; Move results do not certify this device |
+| Full-size Paper Pro (`ferrari`) | Read-only OS 3.28.0.172 / Qt 6.10.3 inventory; exact Ferrari SDK diagnostic build; synthetic portrait geometry tests | Active [portrait preparation](docs/PAPER-PRO-PORTRAIT.md), not a working AI port; runtime, capture and insertion unvalidated; installer disabled |
 
 **Do not run the rM2 installer on either Paper Pro model.** The port does not
 broaden the original firmware gates or provide a general-purpose Move installer.

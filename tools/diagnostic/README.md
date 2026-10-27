@@ -1,4 +1,37 @@
-# Move runtime metadata probe (diagnostic only)
+# Runtime metadata probe (diagnostic only)
+
+## Paper Pro portrait preparation — 2026-10-27
+
+An explicit **separate Ferrari diagnostic build** is available for the observed
+`reMarkable Ferrari` / `IMG_VERSION=3.28.0.172` / Qt `6.10.3` tuple. The default
+build and all historical Move evidence below remain Chiappa-only. Each binary
+rejects the other model; neither enables the AI runtime or any installer.
+
+```sh
+SDK_PRODUCT=ferrari SDK_RELEASE=3.28.0.172 \
+SDK_ENV=/path/to/exact-ferrari-sdk/environment-setup-cortexa53-crypto-remarkable-linux \
+XOVI_REPO=/path/to/xovi bash tools/diagnostic/build.sh ferrari
+```
+
+Outputs are isolated in `build/diagnostic-ferrari/` and `bin/ferrari/`.
+Product/release are explicit operator declarations, not proof derived from
+AArch64 or Qt alone; use the official Ferrari SDK matching the observed tablet.
+The manifest records SDK environment/source/artifact hashes and explicitly marks
+the module not deployed and not runtime-validated. Compilation does not prove
+private notebook APIs or geometry work.
+
+Ferrari supports window/method/mapping metadata and the bounded fixed
+DocumentView resource queries described below. Template identity is returned as
+`unvalidated-ferrari-resource`; `native-pose` refuses until Ferrari's actual
+resource bindings have been independently inspected. Do not reuse the Move
+lexical map, normal-zoom calibration, native-pose profiles or capture dimensions.
+No screenshot, image insertion, provider request or spending operation exists in
+this diagnostic. Loading it or adding its broker dependency requires separate
+device authority and a reviewed rollback. Nothing here auto-installs/restarts.
+
+The root host suite builds/tests both mutually exclusive policy variants.
+
+## Historical Move diagnostic and evidence
 
 This separate XOVI extension is **not** the ChatGPT plugin and does not enable
 Paper Pro/Move support. It never captures screenshots, reads page IDs or text,

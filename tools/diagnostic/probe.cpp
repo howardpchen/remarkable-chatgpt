@@ -93,7 +93,13 @@ QJsonObject collect(bool pose=false) {
             if(pose)candidates.append(QJsonObject{{"kind","native-pose"},{"pose",nativePose(item)}});
             if(controller)candidates.append(QJsonObject{{"kind","document-controller"},
                 {"controllerOrdinal",controllerOrdinal(controller)},
-                {"templateStatus",templateStatus(qmlEngine(object),object)},
+                {"templateStatus",
+#ifdef INK_DIAGNOSTIC_FERRARI
+                    QStringLiteral("unvalidated-ferrari-resource")
+#else
+                    templateStatus(qmlEngine(object),object)
+#endif
+                },
                 {"insertImageFileAsSceneItem",signatures(controller,"insertImageFileAsSceneItem")}});
         }
         auto mapping=signatures(object,"viewToScene");
@@ -114,7 +120,7 @@ QJsonObject collect(bool pose=false) {
         if(!viewport.isEmpty())candidate.insert("viewport",viewport);
         candidates.append(candidate);
     }
-    return {{"ok",true},{"diagnosticOnly",true},{"model","chiappa"},{"release","3.28.0.172"},
+    return {{"ok",true},{"diagnosticOnly",true},{"model",model},{"release",release},
         {"qt",QString::fromLatin1(qVersion())},{"windows",windows},{"documentLoaded",documentLoaded},
         {"candidates",candidates},{"scanTruncated",!pending.isEmpty()}};
 }
@@ -127,7 +133,13 @@ extern "C" char *ink_diary_probe(const char *argument) {
         const QByteArray request=argument ? QByteArray(argument) : QByteArray();
         auto job=[&]{
             if(request.isEmpty())result=diagnostic::collect();
-            else if(request=="native-pose")result=diagnostic::collect(true);
+            else if(request=="native-pose") {
+#ifdef INK_DIAGNOSTIC_FERRARI
+                result={{"ok",false},{"error","native-pose-unvalidated-for-ferrari"}};
+#else
+                result=diagnostic::collect(true);
+#endif
+            }
             else if(request=="document-view-resource")result=diagnostic::documentViewResource();
             else {
                 result={{"ok",false},{"error","unsupported-diagnostic-request"}};

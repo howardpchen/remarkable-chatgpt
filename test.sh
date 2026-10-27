@@ -6,6 +6,8 @@ c++ -std=c++17 -fPIC tests/cancellation.cpp -o build-host/cancellation $(pkg-con
 ./build-host/cancellation
 c++ -std=c++17 -fPIC tools/diagnostic/test-policy.cpp -o build-host/diagnostic-policy $(pkg-config --cflags --libs Qt6Core)
 ./build-host/diagnostic-policy
+c++ -std=c++17 -fPIC -DINK_DIAGNOSTIC_FERRARI tools/diagnostic/test-policy.cpp -o build-host/diagnostic-policy-ferrari $(pkg-config --cflags --libs Qt6Core)
+./build-host/diagnostic-policy-ferrari
 "$(pkg-config --variable=libexecdir Qt6Core)/moc" tools/diagnostic/test-mapping.cpp -o build-host/test-mapping.moc
 c++ -std=c++17 -fPIC tools/diagnostic/test-mapping.cpp -Ibuild-host -o build-host/diagnostic-mapping $(pkg-config --cflags --libs Qt6Quick Qt6Qml Qt6Gui Qt6Core)
 QT_QPA_PLATFORM=offscreen ./build-host/diagnostic-mapping
@@ -17,6 +19,7 @@ c++ -std=c++17 -fPIC tools/offline-spike/test-spike.cpp -Ibuild-host -o build-ho
 INK_SPIKE_TEST_DIR="$PWD/build-host/offline-test-artifacts" QT_QPA_PLATFORM=offscreen ./build-host/offline-spike-test
 c++ -std=c++17 -fPIC tests/capture-layout.cpp -o build-host/capture-layout $(pkg-config --cflags --libs Qt6Gui Qt6Core)
 QT_QPA_PLATFORM=offscreen ./build-host/capture-layout
+bash tools/paper-pro-portrait/test.sh
 node tests/append.cjs
 node tests/viewport.cjs
 python3 tests/port-scripts.py

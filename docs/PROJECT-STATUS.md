@@ -5,6 +5,27 @@ Updated: 2026-10-27. OpenClaw registered project: **reMarkable AI — Vellum Mod
 Registration reuses this repository and does not move files, publish changes or
 attach unrelated sessions. Start with `AGENTS.md`, `PROJECT.md` and `ROADMAP.md`.
 
+## Active work: full-size Paper Pro portrait
+
+Owner requested Paper Pro portrait work on 2026-10-27. Read-only inventory now
+confirms Ferrari / software 3.28.0.172 / internal OS 5.8.203 / Qt 6.10.3.
+The exact official Ferrari SDK is installed locally. Isolated portrait candidate
+geometry passes a synthetic crop/ink/render/scaled-placement pipeline and 37
+rejection checks; it also cross-compiles with the Ferrari SDK. A separate exact
+Ferrari diagnostic target cross-builds, with no runtime/install promotion.
+Root host regressions, the rebuilt Move session runtime/UI suite and both
+mutually exclusive diagnostic policies pass. Exact-Ferrari-SDK diagnostic and
+broker ABI 0.2.0 artifacts are staged in ignored
+`build/paper-pro-portrait-stage/` with hashes/source provenance.
+
+No tablet files, keys, usage, notebooks or services were modified, and no app
+restart or provider request ran. The device has no broker endpoints or observed
+loaded XOVI modules in its inspected current xochitl process. Actual Paper Pro
+logical geometry, native resources, capture and insertion remain unvalidated.
+Next: review/authorize temporary broker + diagnostic loading before measuring
+the live notebook. See [Paper Pro portrait checkpoint](PAPER-PRO-PORTRAIT.md).
+This work does not change the accepted Move beta or its packaging milestone below.
+
 ## Implemented locally
 
 - `tools/remarkable-ai/`: target/host CLI with `key status [--json]`, hidden `key

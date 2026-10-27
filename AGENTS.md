@@ -10,6 +10,10 @@ checkpoint after meaningful work so a fresh session can resume without chat hist
   experimental Move implementation in `tools/move-session/`.
 - Current Move support is narrow: Chiappa, portrait 954×1696, normal zoom,
   OS 3.28.0.172 / Qt 6.10.3, Blank/Dots small/Grid small, text answers only.
+- Paper Pro portrait work is separate local preparation in
+  `tools/paper-pro-portrait/` and the explicit Ferrari diagnostic build. Its
+  physical/logical mapping, native resources and runtime remain unvalidated;
+  never substitute Move profiles, SDKs, packaging or private state.
 - Preserve the exact 360×176 capture-owner boundary even when the visible widget
   is narrower. Do not weaken native-pose, page-change or capture admission guards.
 - Preserve the dollar ledger, conservative reservations, prompt caching, 800

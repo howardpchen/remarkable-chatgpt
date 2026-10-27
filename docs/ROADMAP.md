@@ -1,5 +1,19 @@
 # Roadmap
 
+## Active: full-size Paper Pro portrait
+
+1. Read-only Ferrari inventory and exact SDK setup — completed locally/observed.
+2. Isolated portrait geometry pipeline, synthetic rejection tests and separate
+   exact-SDK diagnostic target — completed locally, not device-validated.
+3. Separately authorized temporary diagnostic loading; inspect actual Qt window,
+   resource/ABI and notebook mapping before constructing calibration.
+4. Ferrari-specific native-pose/capture/owner-boundary integration and offline
+   insertion/Undo/Redo/reopen validation.
+5. Reuse existing guarded request/budget flow; separately authorize provider
+   testing and any package deployment/publication. Landscape is out of scope.
+
+See [Paper Pro portrait checkpoint](PAPER-PRO-PORTRAIT.md).
+
 ## Current milestone: local experimental Vellum package
 
 1. Implement key status/set/remove and budget reporting without network calls.

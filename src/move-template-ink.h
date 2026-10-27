@@ -15,28 +15,45 @@ inline double phase(double p,double pitch) {
 }
 inline std::vector<bool> gridBands(const QImage &im,bool horizontal,double pitch) {
     const int n=horizontal?im.height():im.width(), length=horizontal?im.width():im.height();
-    std::vector<bool> mask(n,false);std::vector<double> centers;
+    std::vector<bool> mask(n,false);
+    struct Band {int begin,end;double center;};
+    std::vector<Band> candidates;
+    if(!std::isfinite(pitch) || pitch<8 || pitch>256)return mask;
     for(int i=0;i<n;) {
         auto line=[&](int k) {int count=0;for(int j=0;j<length;++j)
             count+=qGray(im.pixel(horizontal?j:k,horizontal?k:j))<245;
-            // Move's composite framebuffer dithers gray factory rules to
-            // roughly one black pixel in three, not continuous gray strokes.
-            // Coverage alone never certifies a line: thin bands, full-page span
-            // and every inter-band pitch must also match the exact factory grid.
+            // Native gray rules are often binary 1-in-3 dither. Wide writing
+            // can meet this coverage too: it must not invalidate every rule.
             return count*100>=length*25;};
         if(!line(i)){++i;continue;}
         int end=i+1;while(end<n && line(end))++end;
-        if(end-i>4)return std::vector<bool>(n,false);
-        centers.push_back((i+end-1)/2.0);
-        for(int k=i;k<end;++k)mask[k]=true;
+        if(end-i<=4)candidates.push_back({i,end,(i+end-1)/2.0});
+        // Thick bands remain ink. Never infer a template mask through them.
         i=end;
     }
-    // Full repeating lattice, not an arbitrary long handwritten rule.
-    if(centers.size()<4 || centers.back()-centers.front()<n*0.75)
-        return std::vector<bool>(n,false);
-    for(size_t i=1;i<centers.size();++i)
-        if(std::abs(centers[i]-centers[i-1]-pitch)>2)
-            return std::vector<bool>(n,false);
+    // Certify the dominant known-pitch lattice, allowing writing to obscure
+    // some rules or introduce unrelated thin bands. Only observed thin bands
+    // on that lattice are masked; unmatched/table/handwritten rules remain ink.
+    constexpr double tolerance=1.25; // pixel quantization, not a spacing change
+    int bestCount=0;double bestPhase=0,bestSpan=0;
+    for(const auto &seed:candidates) {
+        const double origin=phase(seed.center,pitch);
+        int count=0;double first=n,last=0;
+        for(const auto &band:candidates)
+            if(distance(phase(band.center,pitch),origin,pitch)<=tolerance) {
+                ++count;first=std::min(first,band.center);last=std::max(last,band.center);
+            }
+        if(count>bestCount || (count==bestCount && last-first>bestSpan)) {
+            bestCount=count;bestPhase=origin;bestSpan=last-first;
+        }
+    }
+    // A few coincident handwriting strokes are not enough. Demand a dense
+    // factory-pitch lattice spanning most of the full capture dimension.
+    if(bestCount<4 || bestCount<int(std::ceil(n/pitch*0.75)) || bestSpan<n*0.75)
+        return mask;
+    for(const auto &band:candidates)
+        if(distance(phase(band.center,pitch),bestPhase,pitch)<=tolerance)
+            for(int k=band.begin;k<band.end;++k)mask[k]=true;
     return mask;
 }
 inline int lastRow(const QImage &source,const QString &name,double scenePerPixel) {

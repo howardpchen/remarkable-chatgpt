@@ -52,6 +52,32 @@ int main() {
     assert(moveTemplateInk::lastRow(dithered,"P Grid small",scale)==339);
     dithered.setPixelColor(501,430,Qt::black);
     assert(moveTemplateInk::lastRow(dithered,"P Grid small",scale)==430);
+    // Regression: a wide handwritten table creates high-coverage thick bands
+    // and off-lattice thin rules. These must not disqualify all template rows.
+    QImage table=originalDithered;
+    {QPainter p(&table);p.fillRect(180,320,560,12,Qt::black);
+        p.fillRect(200,410,520,2,Qt::black);
+        p.fillRect(240,200,8,600,Qt::black);}
+    const auto frozenTable=table;
+    assert(moveTemplateInk::lastRow(table,"P Grid small",scale)==799);
+    assert(table==frozenTable); // only the placement-analysis copy is filtered
+    // An extra off-lattice handwritten horizontal rule survives lattice fitting.
+    {QPainter p(&table);p.fillRect(0,1000,954,1,Qt::black);}
+    assert(moveTemplateInk::lastRow(table,"P Grid small",scale)==1000);
+    // Thick ink on a native grid row is never extrapolated away.
+    QImage touching=originalDithered;
+    {QPainter p(&touching);p.fillRect(0,int(20*52/scale)-2,954,9,Qt::black);}
+    assert(moveTemplateInk::lastRow(touching,"P Grid small",scale)==int(20*52/scale)+6);
+    // A sparse, periodic handwritten pattern is not a full factory lattice.
+    QImage sparse(954,1696,QImage::Format_RGB32);sparse.fill(Qt::white);
+    {QPainter p(&sparse);p.setPen(Qt::black);
+        for(int i=0;i<5;++i)p.drawLine(0,100+int(i*52/scale),953,100+int(i*52/scale));}
+    assert(moveTemplateInk::lastRow(sparse,"P Grid small",scale)==100+int(4*52/scale));
+    // Near-but-wrong spacing across the page does not certify a factory grid.
+    QImage wrongPitch(954,1696,QImage::Format_RGB32);wrongPitch.fill(Qt::white);
+    {QPainter p(&wrongPitch);p.setPen(Qt::black);
+        for(int i=0;i<27;++i)p.drawLine(0,25+i*61,953,25+i*61);}
+    assert(moveTemplateInk::lastRow(wrongPitch,"P Grid small",scale)==25+26*61);
     // A dark full-width handwritten line on Blank must never be erased.
     QImage blank(954,1696,QImage::Format_RGB32);blank.fill(Qt::white);
     {QPainter p(&blank);p.setPen(Qt::black);p.drawLine(0,1000,953,1000);}

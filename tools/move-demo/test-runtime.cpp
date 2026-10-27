@@ -137,7 +137,7 @@ int main(int argc,char **argv) {
         const auto uri=parts[1].toObject()["image_url"].toString();
         const auto sentImage=QImage::fromData(QByteArray::fromBase64(uri.section(',',1).toLatin1()));
         assert(sentImage.size()==QSize(954,1696) && sentImage.pixelColor(0,0)==Qt::black);
-        if(scenario=="dots-before-start" || scenario=="grid-before-start")assert(workflow::samePixels(sentImage,image));
+        if(scenario=="dots-before-start" || (scenario=="grid-before-start" || scenario=="grid-table-before-start"))assert(workflow::samePixels(sentImage,image));
         if(scenario=="shutdown-api")QTimer::singleShot(10,&app,[&]{assert(QMetaObject::invokeMethod(&app,"aboutToQuit",Qt::DirectConnection));});
         if(scenario=="cancel-api")QTimer::singleShot(10,&app,[&]{moveDemo::runtime->cancel();});
         if(scenario=="page-change-api")QTimer::singleShot(10,&app,[&]{root->setProperty("currentPageId","changed");});
@@ -184,8 +184,8 @@ int main(int argc,char **argv) {
 #endif
 #ifdef INK_MOVE_PER_REQUEST
     if(scenario=="dots-before-start" || scenario=="dots-empty" || scenario=="dots-change-api")document.name="P Dots S";
-    if(scenario=="grid-before-start" || scenario=="grid-empty")document.name="P Grid small";
-    if(scenario=="dots-before-start" || scenario=="grid-before-start" || scenario=="dots-empty" || scenario=="grid-empty") {
+    if((scenario=="grid-before-start" || scenario=="grid-table-before-start") || scenario=="grid-empty")document.name="P Grid small";
+    if(scenario=="dots-before-start" || (scenario=="grid-before-start" || scenario=="grid-table-before-start") || scenario=="dots-empty" || scenario=="grid-empty") {
         image.fill(Qt::white);
         QPainter painter(&image);painter.setPen(QColor(180,180,180));
         const double pitch=(document.name=="P Dots S"?42.5:52)/view.factor;
@@ -197,6 +197,11 @@ int main(int argc,char **argv) {
                 painter.fillRect(int(x),int(y),2,2,Qt::black);
         }
         if(!scenario.endsWith("-empty"))painter.fillRect(400,140,40,20,Qt::black);
+        if(scenario=="grid-table-before-start") {
+            painter.fillRect(180,320,560,12,Qt::black);
+            painter.fillRect(200,410,520,2,Qt::black);
+            painter.fillRect(240,200,8,600,Qt::black);
+        }
         painter.end();
         if(!scenario.endsWith("-empty"))image.setPixelColor(0,0,Qt::black);
     }
@@ -245,7 +250,7 @@ int main(int argc,char **argv) {
     assert(captures<=1 && !QFile::exists(workflow::base+"/check.png"));
 #endif
     assert(QFile::exists(workflow::base+"/START_CONSUMED"));
-    const bool successExpected=scenario=="success" || scenario=="translated-before-start" || scenario=="dots-before-start" || scenario=="grid-before-start"
+    const bool successExpected=scenario=="success" || scenario=="translated-before-start" || scenario=="dots-before-start" || (scenario=="grid-before-start" || scenario=="grid-table-before-start")
 #ifdef INK_MOVE_SINGLE_CAPTURE
         || scenario=="same-page-ink" || scenario=="changed-pixels"
 #endif
@@ -261,7 +266,7 @@ int main(int argc,char **argv) {
         assert(QFile::exists(workflow::base+"/INSERTION_CONSUMED"));
     } else {assert(controller.calls==0);assert(!QFile::exists(workflow::base+"/INSERTION_CONSUMED"));}
 #ifdef INK_MOVE_LIVE_TEST
-    const bool apiExpected=scenario=="success" || scenario=="translated-before-start" || scenario=="dots-before-start" || scenario=="grid-before-start" || scenario=="same-page-ink" || scenario=="changed-pixels" || scenario=="malformed" || scenario=="unsupported" || scenario=="needs-web" || scenario=="clarification" || scenario=="unknown-kind" || scenario=="too-large" || scenario=="http-error" || scenario=="api-timeout" || scenario.endsWith("-api");
+    const bool apiExpected=scenario=="success" || scenario=="translated-before-start" || scenario=="dots-before-start" || (scenario=="grid-before-start" || scenario=="grid-table-before-start") || scenario=="same-page-ink" || scenario=="changed-pixels" || scenario=="malformed" || scenario=="unsupported" || scenario=="needs-web" || scenario=="clarification" || scenario=="unknown-kind" || scenario=="too-large" || scenario=="http-error" || scenario=="api-timeout" || scenario.endsWith("-api");
     assert(manager.requests==(apiExpected?1:0));
     if(scenario=="shutdown-api" || scenario=="cancel-api" || scenario=="api-timeout" || scenario.endsWith("change-api"))assert(manager.aborts==1);
 #endif

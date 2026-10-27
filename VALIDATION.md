@@ -6,12 +6,28 @@ The history below concerns the **rM2 prototype**, including older rendering
 implementations; it is not Paper Pro/Move certification. For the current
 new-device matrix, see [port status](docs/PORT-STATUS.md).
 
-As of 2026-10-26, the Move bounded offline spike passed read-only mapping and
-one synthetic native insertion, with owner-confirmed placement/scale, undo, redo
-and close/reopen persistence. Qt capture failed (`qt-capture-unavailable`);
-`rm-shot` is absent and untested there. Full offline integration and live API
-testing remain pending. Paper Pro requires independent hardware validation.
-Production support for both targets remains disabled.
+As of 2026-10-26, Move exact-release mapping and original synthetic native
+insertion passed, including owner-confirmed placement, Undo/Redo and persistence.
+Qt window capture failed separately; supported rm-shot subsequently produced real
+954×1696 screenshots, including a controlled live toolbar-change check. A separate
+bounded Blank-template offline fixture then passed capture → production rendering
+→ freshness check → one native insertion, with independent postcapture readable
+placement and owner-confirmed Undo/Redo/close-reopen persistence. This fixture is
+a fixed response, not handwritten-question recognition or a live API answer.
+Black dotted templates currently confuse automatic ink-extent append detection;
+this did not prevent the earlier explicitly positioned native insertion.
+Production UI/runtime, broader geometry/cancellation/resource checks, rM2 hardware
+regression and live API testing remain pending. Paper Pro requires independent
+hardware validation after Move. Production support for both remains disabled.
+
+## Local bounded live-text preparation
+
+A separate OpenAI text-test artifact is prepared under
+[tools/move-live](tools/move-live/README.md). Host tests use synthetic images,
+mock transport and fake native pose; exact-SDK compilation is not device testing.
+Those local checks alone do not establish a live API answer or production support.
+A later authorized [unarmed widget deployment](docs/MOVE-WIDGET-DEPLOYMENT.md)
+is documented separately. The earlier shutdown crash is unresolved.
 
 ## rM2 validation history
 

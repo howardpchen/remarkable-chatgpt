@@ -16,15 +16,24 @@ installation. Experimental port work has the following status:
 | Target | Verified scope | Release status |
 | --- | --- | --- |
 | reMarkable 2 | Existing 3.27.3.0 prototype; see validation history | Existing prototype baseline |
-| Paper Pro Move (`chiappa`) | Exact 3.28.0.172 SDK build, read-only mapping, one synthetic image insertion, owner-confirmed placement/scale, undo, redo and close/reopen persistence | Capture blocked; production support disabled |
+| Paper Pro Move (`chiappa`) | Exact 3.28.0.172 SDK build, real capture/live-change check, bounded Blank-template offline capture/render/insertion with Undo/Redo/reopen persistence | Production UI/runtime, real recognition/API and broader validation pending; production support disabled |
 | Paper Pro (`ferrari`) | Build-target preparation only; independent hardware validation pending | Production support disabled |
 
-Move Qt window capture returned `qt-capture-unavailable`; `rm-shot` is absent
-and has not been tested there. No live API request was made during the Move
+Move Qt window capture returned `qt-capture-unavailable`. Supported `rm-shot` and
+framebuffer-spy subsequently passed actual screenshot validation and a bounded fixed-response offline fixture. No live API request was made during the Move
 spike. Passing insertion does not establish the full screenshot-to-answer flow.
 See [current port status and next gates](docs/PORT-STATUS.md) and
 [developer port preparation](docs/PORTING.md). Do not use the rM2 installer on
 these targets or broaden compatibility gates based on the spike.
+
+### Unarmed live-text/widget experiment
+
+A separate [bounded OpenAI text-test target](tools/move-live/README.md) now connects
+the tested Move capture/insertion controller to an asynchronous, single-request
+client. The extension and compact/dismissible widget are deployed on the exact
+Move release but remain **unarmed**; see [deployment verification](docs/MOVE-WIDGET-DEPLOYMENT.md).
+This is not production support or live-provider validation. No new tablet
+config/helper is implied; key provisioning and the first paid test remain separate.
 
 ## Demo mode
 

@@ -50,6 +50,17 @@ static void check(bool condition,const char *message) {if(!condition)throw std::
 int main(int argc,char **argv) {
     QCoreApplication app(argc,argv);
     try {
+#ifdef INK_DIARY_EXPERIMENTAL_MOVE
+        for(bool images:{false,true}) {
+            MockManager manager;
+            bool rejected=false,validCalled=false;
+            try {diaryApiRequestWithManager(manager,{},"offline-placeholder",[&]{validCalled=true;return true;},images);}
+            catch(const std::runtime_error &error) {rejected=QString::fromUtf8(error.what()).contains("offline demo-only");}
+            check(rejected,"Experimental artifact allowed API entry");
+            check(!validCalled && manager.requests==0,"Experimental artifact reached dispatch preparation");
+        }
+        std::cout<<"PASS: experimental Move artifact rejects Responses/Images before dispatch independently of config\n";
+#else
         // Both Responses and Images use the same guarded dispatch boundary.
         for(bool images:{false,true}) {
             MockManager manager;
@@ -84,6 +95,7 @@ int main(int argc,char **argv) {
             check(manager.requests==1 && manager.aborts==1,"In-flight request not aborted");
         }
         std::cout<<"Offline API cancellation tests passed\n";
+#endif
         return 0;
     } catch(const std::exception &error) {std::cerr<<error.what()<<'\n';return 1;}
 }

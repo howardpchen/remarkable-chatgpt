@@ -1,0 +1,184 @@
+import QtQuick 2.15
+import net.asivery.XoviMessageBroker 2.0
+
+// Compact idle launcher; expanded capture uses the tested 360×176 footprint.
+// Live text test backend only. No on-load Start.
+Rectangle {
+    id: moveUiProbe
+    objectName: "moveUiProbe"
+    z: 10000
+    anchors.right: parent ? parent.right : undefined
+    anchors.bottom: parent ? parent.bottom : undefined
+    anchors.margins: 16
+    property bool controlsExpanded: false
+    readonly property bool panelExpanded: controlsExpanded || demoBusy
+    width: parent ? Math.max(0, Math.min(panelExpanded ? 360 : 72, parent.width - 32)) : 0
+    height: panelExpanded ? 176 : 72
+    readonly property string diaryCaptureOwner: "ink-diary-owned-control-v1"
+    property bool diaryCaptureSuppressed: false
+    // Read the existing lexical bridge; never alter native toolbar properties.
+    // Unknown/missing state must not offer dismissal without a recovery signal.
+    readonly property var nativeToolbar: (parent !== null &&
+        typeof parent.diaryNativePoseObjects !== "undefined" && parent.diaryNativePoseObjects
+        ? parent.diaryNativePoseObjects.toolbar : null)
+    readonly property bool toolbarsHidden: (nativeToolbar !== null &&
+        typeof nativeToolbar !== "undefined" &&
+        typeof nativeToolbar.shown === "boolean" && nativeToolbar.shown === false)
+    property bool dismissedUntilToolbar: false
+    onToolbarsHiddenChanged: {
+        if (!toolbarsHidden) dismissedUntilToolbar = false;
+    }
+    onDemoBusyChanged: {
+        if (demoBusy) dismissedUntilToolbar = false;
+        else controlsExpanded = false;
+    }
+    visible: !dismissedUntilToolbar && !diaryCaptureSuppressed && parent !== null && parent.documentLoaded === true && parent.width >= 320 && parent.height >= 352
+    color: "white"
+    border.color: "black"
+    border.width: 2
+    radius: 8
+    property bool demoBusy: false
+    property bool demoArmed: false
+    clip: true
+    XoviMessageBroker { id: demoBroker }
+    property int clicks: 0
+    property string localMessage: "Live text test (single-use)"
+
+    function refreshStatus() {
+        try {
+            var result = JSON.parse(demoBroker.sendSimpleSignal("ink-diary-move-live$control", "status"));
+            moveUiProbe.demoBusy = result.busy === true;
+            moveUiProbe.demoArmed = result.canStart === true;
+            moveUiProbe.localMessage = result.message || result.error || "Live text test unavailable";
+        } catch (error) {
+            moveUiProbe.localMessage = "Live text test status unavailable";
+        }
+    }
+    Timer {
+        interval: 250
+        repeat: true
+        running: moveUiProbe.visible
+        onTriggered: moveUiProbe.refreshStatus()
+    }
+
+    Rectangle {
+        id: launcher
+        objectName: "moveUiProbeLauncher"
+        anchors.fill: parent
+        color: "white"
+        border.color: "black"
+        border.width: 2
+        radius: 8
+        visible: !moveUiProbe.panelExpanded
+        Text {
+            anchors.centerIn: parent
+            text: "AI"
+            font.pixelSize: 24
+            color: "black"
+        }
+        MouseArea {
+            anchors.fill: parent
+            onClicked: moveUiProbe.controlsExpanded = true
+        }
+    }
+
+    Rectangle {
+        id: dismissButton
+        objectName: "moveUiProbeDismissButton"
+        anchors.top: parent.top
+        anchors.right: parent.right
+        anchors.margins: 8
+        width: 40
+        height: 40
+        color: "white"
+        // Keep Cancel reachable while a request is running.
+        visible: moveUiProbe.panelExpanded && moveUiProbe.toolbarsHidden && !moveUiProbe.demoBusy
+        enabled: visible
+        Text {
+            anchors.centerIn: parent
+            text: "×"
+            font.pixelSize: 30
+            color: "black"
+        }
+        MouseArea {
+            anchors.fill: parent
+            onClicked: {
+                if (moveUiProbe.toolbarsHidden && !moveUiProbe.demoBusy) {
+                    moveUiProbe.controlsExpanded = false;
+                    moveUiProbe.dismissedUntilToolbar = true;
+                }
+            }
+        }
+    }
+
+    Rectangle {
+        id: collapseButton
+        objectName: "moveUiProbeCollapseButton"
+        anchors.top: parent.top
+        anchors.right: dismissButton.visible ? dismissButton.left : parent.right
+        anchors.margins: 8
+        width: 40
+        height: 40
+        color: "white"
+        visible: moveUiProbe.panelExpanded && !moveUiProbe.demoBusy
+        Text {
+            anchors.centerIn: parent
+            text: "−"
+            font.pixelSize: 30
+            color: "black"
+        }
+        MouseArea {
+            anchors.fill: parent
+            onClicked: {
+                if (!moveUiProbe.demoBusy) moveUiProbe.controlsExpanded = false;
+            }
+        }
+    }
+
+    Text {
+        id: probeStatus
+        visible: moveUiProbe.panelExpanded
+        objectName: "moveUiProbeStatus"
+        anchors.left: parent.left
+        anchors.right: collapseButton.visible ? collapseButton.left : parent.right
+        anchors.top: parent.top
+        anchors.margins: 12
+        height: 60
+        font.pixelSize: 22
+        wrapMode: Text.WordWrap
+        text: moveUiProbe.localMessage
+        color: "black"
+    }
+
+    Rectangle {
+        id: probeButton
+        visible: moveUiProbe.panelExpanded
+        objectName: "moveUiProbeButton"
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.margins: 12
+        height: 76
+        color: "white"
+        border.color: "black"
+        border.width: 2
+        radius: 6
+
+        Text {
+            anchors.centerIn: parent
+            font.pixelSize: 24
+            color: "black"
+            text: moveUiProbe.demoBusy ? "Cancel live text test" : (moveUiProbe.demoArmed ? "Start live text test" : "Live text test not armed")
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            enabled: moveUiProbe.demoBusy || moveUiProbe.demoArmed
+            onClicked: {
+                moveUiProbe.clicks += 1;
+                demoBroker.sendSimpleSignal("ink-diary-move-live$control", moveUiProbe.demoBusy ? "cancel" : "start");
+                moveUiProbe.refreshStatus();
+            }
+        }
+    }
+}

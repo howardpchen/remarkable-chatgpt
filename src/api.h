@@ -4,6 +4,7 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
+#include "api-request.h"
 #include <QEventLoop>
 #include <QTimer>
 #include <functional>
@@ -14,10 +15,12 @@
 inline QJsonObject diaryApiRequestWithManager(QNetworkAccessManager &manager,
                                   const QJsonObject &payload,const QString &key,
                                   const std::function<bool()> &valid, bool imageGeneration=false) {
-    QNetworkRequest request(QUrl(imageGeneration ? "https://api.openai.com/v1/images/generations" : "https://api.openai.com/v1/responses"));
-    request.setHeader(QNetworkRequest::ContentTypeHeader,"application/json");
-    request.setRawHeader("Authorization", "Bearer " + key.toUtf8());
-    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute,QNetworkRequest::ManualRedirectPolicy);
+#ifdef INK_DIARY_EXPERIMENTAL_MOVE
+    // Experimental Move artifacts are offline-only regardless of runtime config
+    // or which caller reaches this shared Responses/Images dispatch boundary.
+    throw std::runtime_error("Experimental Move artifact is offline demo-only");
+#endif
+    auto request=diaryOpenAiRequest(key,imageGeneration);
     const auto body=QJsonDocument(payload).toJson(QJsonDocument::Compact);
     // Serialization can be nontrivial for a screenshot: validate at the actual
     // dispatch boundary, not only before preparing the request.

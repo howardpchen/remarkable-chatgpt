@@ -1,0 +1,9 @@
+version 0.1.0
+condition _ZNK3csl10devicelock10DeviceLock3setENS1_5StateE
+condition xovi-message-broker$broadcast
+depends-on xovi-message-broker:0.2.0
+export ink_diary_capture_ui
+with
+    xovi-message-broker$simpleSignal = "ink-diary-capture-ui$control"
+    xovi-message-broker$version = 1
+end

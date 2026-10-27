@@ -1,0 +1,1 @@
+{ global: LINKTABLENAMES; LINKTABLEVALUES; METADATAVALUES; Environment; EXTENSIONVERSION; _xovi_shouldLoad; _xovi_depconstruct; ink_diary_capture_ui; local: *; };

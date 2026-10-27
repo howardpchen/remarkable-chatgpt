@@ -1,0 +1,18 @@
+version 0.1.0
+
+; Match the broker's GUI-process condition and unload safely if its module is
+; unavailable. Pass 2a re-evaluates conditions until dependent unloads settle.
+condition _ZNK3csl10devicelock10DeviceLock3setENS1_5StateE
+condition xovi-message-broker$broadcast
+
+depends-on xovi-message-broker:0.2.0
+export ink_diary_probe
+with
+    xovi-message-broker$simpleSignal = "ink-diary-probe$probe"
+    xovi-message-broker$version = 1
+end
+export ink_diary_offline
+with
+    xovi-message-broker$simpleSignal = "ink-diary-offline$run"
+    xovi-message-broker$version = 1
+end

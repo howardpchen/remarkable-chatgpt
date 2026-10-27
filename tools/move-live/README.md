@@ -1,10 +1,13 @@
 # Bounded Move live-text experiment — unarmed widget deployment
 
-This is a **separate, unarmed test artifact**, not production Move support.
-The extension/widget is now installed on the exact Move release; no API key or
-reviewed live-run reference was provisioned by this deployment. See
-[deployment verification](../../docs/MOVE-WIDGET-DEPLOYMENT.md) for observed UI
-evidence and owner UI acceptance. Installation is not live-provider validation.
+This is a **separate, single-use test artifact**, not production Move support.
+One authorized GPT-6 Luna request and table insertion completed on the Move;
+the owner retrospectively confirmed Undo, Redo and close/reopen worked for that live output. That run
+is consumed and must not be reset. Later full-screen capture-only device checks
+verified native UI hiding and exact before/after restoration. Current limitations
+and the local-only helper are in [Move live readiness](../../docs/MOVE-LIVE-READINESS.md).
+Earlier deployment/preparation sections below retain their historical scope;
+"not provisioned" means not created by those scripts, not proof of current absence.
 It reuses the tested 360×176 controller, exact native-pose admission, rm-shot
 capture suppression, Markdown renderer, scene scaling and insertion guards.
 The original `tools/move-demo` target remains offline-only; the shared generic
@@ -15,9 +18,24 @@ Local completion/evidence: [Move steps 1–3](../../docs/MOVE-LIVE-PREPARATION.m
 
 ## Contract
 
-- One explicit Start, one cropped 834×1584 image, one direct OpenAI Responses POST.
-- Model fixed to `gpt-4.1-mini`; `store:false`, 800 maximum output tokens.
-- Strict JSON `{kind: "text" | "unsupported", text: string}`, checked locally.
+- One explicit Start, one full 954×1696 image (x=0, y=0), one direct OpenAI Responses POST.
+- During each capture, a temporary QML `Binding` forces native toolbar
+  `visible:false`, hiding its descendants without changing `expanded` or the
+  toolbar setting. `Binding.RestoreBindingOrValue` restores the original binding
+  or value after that capture, cancellation, failure or capture-session teardown
+  while the widget exists. Widget destruction itself may intentionally leave the
+  native toolbar hidden (owner-directed exception; no destruction restore hook).
+  The UI stays restored during the API wait. A previously hidden toolbar stays hidden.
+- Capture includes all four screen edges. The hidden native-pose reference and
+  read-only acknowledgement must show toolbar `visible:false` and `shown:false`.
+  Any smaller visible UI item intersecting the capture rejects it, including a
+  close button that did not disappear; full-page structural containers are allowed.
+- Answer rendering/placement keeps its 834-pixel width and x=120 margin so the
+  restored left toolbar does not cover the inserted answer.
+- Model fixed to `gpt-6-luna`; `reasoning.effort:none`, `store:false`,
+  800 maximum output tokens. Reasoning is disabled to preserve the original
+  non-reasoning request contract and strict single-message output parser.
+- Strict JSON `{kind: "text" | "needs_web" | "clarification" | "unsupported", text: string}`, checked locally.
   Incomplete output, refusal, extra fields, wrong types, tools, non-text routes,
   empty/oversized text and malformed envelopes are rejected, not inserted.
 - No search, image generation, plots, specialized diagram/template routing,
@@ -46,7 +64,8 @@ The upper-right × is offered only in the expanded, idle panel while the native
 until the native toolbar is shown again, which restores the idle launcher.
 The recovery binding works while the widget/status polling is hidden. Showing
 the toolbar clears dismissal; hiding the toolbar again does not auto-dismiss.
-There is no × on the collapsed launcher and no native-toolbar write.
+There is no × on the collapsed launcher. Native visibility is overridden only
+by the temporary capture Binding; no persistent setting or expanded-state write.
 Missing/unknown toolbar state keeps × unavailable while expansion/collapse remain
 usable. The existing read-only `diaryNativePoseObjects.toolbar` bridge supplies
 the state; recovered native source defines `shown` as `visible && expanded`.
@@ -65,14 +84,16 @@ alone do not establish tablet interaction or a live answer.
 
 - New, separately reviewed private run directory:
   `/home/root/xovi/move-live-text-v1` (0700).
-- New `reviewed-reference.json` for the actual page, viewport, native pose,
+- New schema-2 `reviewed-reference.json` with `captureArea:[0,0,954,1696]`,
+  exact `nativePose` (restored/visible state), exact `hiddenNativePose` (captured
+  with the temporary toolbar binding active), actual page, viewport,
   effective resource and **new installed artifact hashes**, plus fonts. Never
   copy an old reference unchanged or reset/reuse the consumed offline run.
 - New START_CONSUMED and INSERTION_CONSUMED claims. Old experiment markers stay
   untouched. Cancellation/failure/reload cannot replay a consumed Start.
 - Intended credential file `/home/root/.config/ink-diary/config.json` (0600),
   owned by the running user, regular, not symlinked or hard-linked, max 16 KiB.
-  Required fields: `api_key` and `model` (`gpt-4.1-mini`); no demo mode.
+  Required fields: `api_key` and `model` (`gpt-6-luna`); no demo mode.
   No credential is read at load/status. The loader reads it only on Start and
   does not return it through the broker. Config endpoint overrides are ignored.
 - New `MoveLive.qml` uses the distinct `ink-diary-move-live$control` broker
@@ -128,7 +149,7 @@ can otherwise fail patch parsing. The helper hashes and reapplies the candidate,
 requires one widget/map, and never activates it. Compare normalized original and
 patched QML with the matching SDK before any later deployment.
 
-## Next milestone — live API still unarmed
+## Historical first-live-test preparation (superseded by the completed one-shot run)
 
 Keep the earlier unexplained shutdown crash in mind for any future reload.
 Widget deployment does not authorize insertion or API spending: obtain an explicit
@@ -143,12 +164,18 @@ persistence, health and unrelated mod hashes. Never automatically repeat an
 uncertain call or insertion. This is not approval to perform that milestone.
 One-request/token ceilings bound traffic but are **not a dollar billing cap**.
 
-## Official contract checked 2026-10-26
+## Official contract and model migration — 2026-10-26
 
 - https://developers.openai.com/api/docs/guides/structured-outputs
-- https://developers.openai.com/api/docs/models/gpt-4.1-mini
+- https://developers.openai.com/api/docs/models/gpt-6-luna
 
-The current model page lists image input, Responses and structured outputs but
-marks GPT-4.1 mini **deprecated**. Preserve the selected model here; availability
-and exact application-shaped behavior still need the separately authorized live
-probe. There is deliberately no silent substitution.
+At the owner's request, the local live target now pins GPT-6 Luna instead of
+GPT-4.1 mini. Official documentation lists image input, Responses, structured
+outputs and `none` reasoning support. The endpoint, schema, one-request limit
+and 800-token ceiling are unchanged; stale GPT-4.1-mini configuration is rejected.
+The model was subsequently deployed and one scoped live request completed. This
+local-only helper revision is not deployed. Broader behavior remains unverified;
+there is no silent fallback.
+
+One-request/token ceilings are not a hard dollar cap; the earlier proposed
+$0.10 test budget is only a proposed spending ceiling, not an implemented billing control.

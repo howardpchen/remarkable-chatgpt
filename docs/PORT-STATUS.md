@@ -1,26 +1,45 @@
 # Paper Pro / Move implementation status
 
+## Current personal-beta checkpoint — 2026-10-27
+
+The owner accepted the installed per-request v4 single-capture beta for **Blank,
+Dots small and Grid small**, portrait at normal zoom. Dots small and Grid small
+both passed real handwritten-question recognition, native answer placement without
+overlap, and owner-confirmed Undo/Redo/close-reopen. Two requests used the bounded
+three-attempt root; one slot remains. No automatic retry or quota refill exists.
+An ongoing-use spending allowance has not been specified; this handoff does not
+increase the existing quota or budget.
+
+The single-capture variant cannot detect new ink on the same page while thinking:
+keep the page still until completion. Exact OS 3.28.0.172 / Qt 6.10.3 and reusable
+device-profile checks remain. The historical shutdown crash is unresolved despite
+later clean restarts. Production installation and full-size Paper Pro remain
+unsupported. See [per-request beta notes](../tools/move-session/README.md).
+
+The following sections are historical evidence, not instructions to replay runs.
+
 Updated: **2026-10-26**, after the first supported Move screenshot validation. This is a record of bounded experiments, **not a validated
 Paper Pro/Move release**. Baseline: `7b883aaf7eaf3e0c2f06c101becab6baec17d789`.
 The existing notebook-button → screenshot → AI response → rendered image → native
 insertion design remains the intended workflow.
 
-## Local live-text preparation (2026-10-26)
+## Earlier Move checkpoint (reconciled 2026-10-26)
 
-The new [separate live-text target](../tools/move-live/README.md) reuses the bounded
-controller and adds a single direct OpenAI request, strict text-only decoding and
-asynchronous cancellation/teardown. Its extension/widget is now installed but
-unarmed, with the launcher/dismissal behavior accepted by the owner; see
-[deployment verification](MOVE-WIDGET-DEPLOYMENT.md). No live API
-answer or insertion has been tested through this new target.
-The original offline target remains network-free, all device one-shot claims stay
-consumed, and the production eligibility/capture gates are unchanged. Intended
-configuration paths must not be described as installed files. GPT-4.1 mini is
-retained as selected; current official docs mark it deprecated, so live model
-availability is still an explicit gate. See the target README for exact scope,
-verification commands, limits and the separately authorized hardware milestone.
+One scoped GPT-6 Luna request and native table insertion completed; an actual
+screenshot independently showed a visible 2×2 table below the handwritten request.
+The owner retrospectively confirmed Undo, Redo and close/reopen worked for that live output. The consumed
+run must not be reset or replayed. Later full-screen capture-only verification
+showed all UI absent during capture and pixel-identical before/after restoration.
+The unexplained historical shutdown crash remains unresolved; later clean stops
+are not a demonstrated fix. No new API request or hardware changes were made
+while reconciling this checkpoint.
 
-## Current evidence at a glance
+See [current readiness and remaining gates](MOVE-LIVE-READINESS.md). Earlier
+local-preparation and deployment reports below describe their original scopes;
+claims that the live target has never completed a provider request are superseded.
+The original product and offline demo guards remain intact.
+
+## Earlier evidence at a glance (2026-10-26)
 
 Latest bounded demo: the separate 360×176 offline Start/Cancel control now drives
 two own-UI-suppressed captures, rendering, strict recheck and native insertion on
@@ -44,8 +63,8 @@ do not reset or replay the attempt.
 | One synthetic native image insertion | Invocation succeeded; owner confirmed visibility and sensible placement/scale | Untested |
 | Undo / redo / close-reopen persistence | **All passed, owner-observed** | Untested |
 | Integrated offline fixture capture/render/insertion | **Passed bounded Blank-template fixture**; Undo/Redo/close-reopen also owner-confirmed | Untested |
-| Handwritten question recognition / live answer | Not tested | Not tested |
-| Live API workflow | Not tested in this spike | Not tested |
+| Handwritten question recognition / live answer | One narrow live handwritten table request completed; broad quality untested | Not tested |
+| Live API workflow | One bounded GPT-6 Luna request/insertion; live Undo/Redo/reopen owner-confirmed | Not tested |
 | Production installation support | **Disabled** | **Disabled** |
 
 These observations are limited to the tested portrait, normal-zoom disposable

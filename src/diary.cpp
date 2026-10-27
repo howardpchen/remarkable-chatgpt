@@ -15,6 +15,8 @@
 #include <QUuid>
 #include <QMetaMethod>
 #include <QTimer>
+#include "capture-layout.h"
+#include "capture-ui.h"
 #include "inserter.inc"
 #include "layout.h"
 #include "response.h"
@@ -39,8 +41,37 @@ const QString base = "/home/root/.config/ink-diary";
 void state(const QString &text) { QMutexLocker lock(&stateMutex); message = text; }
 void require(bool valid, const char *why) { if (!valid) throw std::runtime_error(why); }
 
-QImage capture(const QString &path) {
+QImage capture(const QString &path, bool suppressOwnUi = false) {
+    // The worker owns the lease, but all Qt Quick access and destruction stays
+    // on the GUI thread. Keep it held until asynchronous rm-shot decoding ends.
+    auto guiDelete = [](DiaryCaptureUiSession *session) {
+        if (session) runOnGuiSync([session] { delete session; });
+    };
+    std::unique_ptr<DiaryCaptureUiSession, decltype(guiDelete)> ui(nullptr, guiDelete);
+    auto phase = std::make_shared<std::atomic<int>>(0);
+    auto uiValid = [&] {
+        if (!ui) return !suppressOwnUi;
+        bool valid = false;
+        return runOnGuiSync([&] { valid = ui->readyForCapture(); }) && valid;
+    };
     require(diaryGuard(), "Cancelled or page changed");
+    if (suppressOwnUi) {
+        require(QThread::currentThread() != qGuiApp->thread(), "Capture requires worker thread");
+        require(runOnGuiSync([&] {
+            auto *view = qobject_cast<QQuickItem *>(originView.data());
+            ui.reset(new DiaryCaptureUiSession(view ? view->window() : nullptr,
+                [phase](DiaryCaptureUiSession::Event event, const QString &) {
+                    phase->store(event == DiaryCaptureUiSession::Event::RenderReady ? 1 : -1);
+                }));
+            ui->begin();
+        }), "Cannot dispatch capture suppression");
+        for (int i=0; i<175 && phase->load()==0; ++i) {
+            require(diaryGuard(), "Cancelled or page changed");
+            QThread::msleep(20);
+        }
+        require(phase->load()==1 && uiValid(), "Capture UI did not render hidden");
+    }
+    require(diaryGuard() && uiValid(), "Capture context changed");
     QFile::remove(path);
     QByteArray arg = (path + ",0,0").toUtf8();
     char *result = rm_shot$screenshotHandler(arg.data());
@@ -55,6 +86,7 @@ QImage capture(const QString &path) {
         QImage image(path);
         // The page can change while waiting for rm-shot or decoding its image.
         require(diaryGuard(), "Cancelled or page changed");
+        require(uiValid(), "Capture UI changed while reading screenshot");
         if (!image.isNull()) return image;
     }
     throw std::runtime_error("Screenshot timed out");
@@ -143,26 +175,49 @@ void work() {
         require(file.open(QIODevice::ReadOnly), "Create ink-diary/config.json first");
         QJsonObject config=QJsonDocument::fromJson(file.readAll()).object();
         require(!config.isEmpty(), "Invalid config.json");
+        bool experimentalMove=false;
+        const QString moveOptIn=config.value("experimental_move_profile").toString();
+        if(!moveOptIn.isEmpty()) {
+#ifndef INK_DIARY_EXPERIMENTAL_MOVE
+            throw std::runtime_error("Experimental Move runtime is not enabled in this build");
+#else
+            auto read=[](const QString &path) {QFile f(path);return f.open(QIODevice::ReadOnly)?f.readAll():QByteArray();};
+            require(diaryExperimentalMoveTuple(read("/sys/devices/soc0/machine"),read("/etc/os-release"),qVersion(),moveOptIn),
+                    "Unsupported experimental Move tuple");
+            require(diaryExperimentalMoveDemoAllowed(true,config.value("demo_mode").toBool(false)),
+                    "Experimental Move artifact is offline demo-only");
+            // Live metadata is independently validated. The normal reference must
+            // still be separately provisioned for this exact confirmed page.
+            // Integrated capture UI exclusion is NOT yet validated.
+            diaryRequireExperimentalMoveCaptureReady(originViewport,
+                config.value("experimental_move_normal_viewport").toObject());
+            experimentalMove=true;
+#endif
+        }
+        // Reject an unready experimental profile BEFORE reading any page pixels.
         state("Reading page...");
         // Let the button switch to its stable busy appearance before capture.
         QThread::msleep(800);
-        auto screen=capture(temp.path()+"/question.png");
-        require(screen.width()==1404 && screen.height()==1872,
-                "First version requires rM2 portrait (1404 x 1872)");
+        auto screen=capture(temp.path()+"/question.png", experimentalMove);
         QSize canvas;
         runOnGuiSync([&] {canvas=activeCanvasSize();});
-        require(canvas==screen.size(), "Screen/input coordinates differ; refusing to draw");
-        const QRect area=diaryCaptureArea();
+        const auto layout=experimentalMove ? diaryExperimentalMoveLayout(screen.size(),canvas,
+            originViewport.value("devicePixelRatio").toDouble(0)) : diaryCaptureLayout(screen.size(),canvas,
+            originViewport.value("devicePixelRatio").toDouble(0));
+        const QRect area=layout.area;
         QImage question=screen.copy(area);
         int last=lastInkRow(question);
         require(last>=0, "Write a question on a blank page first");
-        int top=area.y()+last+45;
+        int top=area.y()+last+layout.answerGap;
         // Native scene images can extend below the current viewport. Render at
         // a fixed readable size, independent of empty space on screen.
-        int width=area.width(), available=1582;
+        int width=area.width(), available=experimentalMove ? area.y()+area.height()-top : layout.answerHeight;
+        require(!experimentalMove || available>0,"No visible space below the question on this Move page");
         state("Thinking...");
         bool demo=config.value("demo_mode").toBool(false);
         DiaryAnswer resultAnswer;
+        require(diaryExperimentalMoveDemoAllowed(experimentalMove,demo),
+                "Experimental Move artifact is offline demo-only");
         if(demo) resultAnswer.text="This is a handwriting test. Live answers will work after you configure an OpenAI API key.";
         else resultAnswer=decodeDiaryAnswer(answer(question,config,qMin(9,available/60)));
         if(!demo)diaryRequireFreshSearch(resultAnswer);
@@ -204,8 +259,15 @@ void work() {
             } catch(const std::exception &error) {renderError=QString::fromUtf8(error.what());}
         });
         if(!renderError.isEmpty()) throw std::runtime_error(renderError.toStdString());
+        DiaryMovePlacement movePlacement;
+        if(experimentalMove) {
+            movePlacement=diaryExperimentalMovePlacement(ink,top,originViewport,
+                config.value("experimental_move_normal_viewport").toObject());
+            ink=movePlacement.nativeImage;
+        }
         state("Checking page...");
-        auto current=capture(temp.path()+"/check.png");
+        auto current=capture(temp.path()+"/check.png", experimentalMove);
+        require(current.size()==screen.size(), "Capture geometry changed while thinking");
         require(current.copy(area)==question, "Page changed while thinking; tap ChatGPT again");
         require(diaryGuard(), "Cancelled or page changed");
         const QString answerDir="/home/root/.local/share/ink-diary/answers";
@@ -232,7 +294,9 @@ void work() {
         require(diaryGuard(), "Cancelled or page changed");
         state("Inserting image...");
         auto result=insertSceneImage(QJsonObject{{"path",imagePath},{"coordinateSpace","screen"},
-            {"x",area.x()+width/2.0},{"y",top+ink.height()/2.0},{"appendBelowContent",true}});
+            {"x",experimentalMove ? movePlacement.screenBounds.center().x() : area.x()+width/2.0},
+            {"y",experimentalMove ? movePlacement.screenBounds.center().y() : top+ink.height()/2.0},
+            {"appendBelowContent",!experimentalMove}},experimentalMove ? &movePlacement : nullptr);
         if(!result.value("ok").toBool()) {
             QFile::remove(imagePath);
             QFile::remove(htmlPath);
@@ -253,7 +317,7 @@ static bool diaryGuard() {
         auto now=findActivePage();
         valid=originController && originView && now.controller==originController.data()
             && now.documentView==originView.data() && now.pageId==originPage
-            && !originViewport.isEmpty() && diaryViewportSnapshot()==originViewport;
+            && diaryViewportFresh(originViewport,diaryViewportSnapshot());
     });
     if(!valid) cancelled=true;
     return valid;

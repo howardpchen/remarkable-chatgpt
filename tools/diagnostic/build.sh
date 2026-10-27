@@ -24,7 +24,8 @@ import hashlib,json,pathlib,struct,sys
 repo=pathlib.Path(sys.argv[1]); artifact=repo/'bin/chiappa/ink-diary-probe.so'
 data=artifact.read_bytes()
 assert data[:5]==b'\x7fELF\x02' and data[5]==1 and struct.unpack_from('<H',data,18)[0]==183, 'Not AArch64 ELF64'
-sources={str(p.relative_to(repo)):hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted((repo/'tools/diagnostic').glob('*')) if p.is_file()}
+source_paths=list((repo/'tools/diagnostic').glob('*'))+[repo/'src/readonly-template.h',repo/'src/readonly-mapping.h']
+sources={str(p.relative_to(repo)):hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(source_paths) if p.is_file()}
 manifest={'diagnostic_only':True,'model':'chiappa','release':'3.28.0.172','qt':'6.10.3','artifact':artifact.name,'sha256':hashlib.sha256(data).hexdigest(),'sources':sources}
 (repo/'bin/chiappa/diagnostic-build.json').write_text(json.dumps(manifest,indent=2)+'\n')
 print(artifact)

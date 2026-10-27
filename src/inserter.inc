@@ -44,6 +44,7 @@
 #include <unistd.h>
 
 #include "xovi.h"
+#include "move-snapshot.h"
 
 static bool diaryGuard();
 
@@ -52,6 +53,7 @@ namespace {
 QMutex g_inputMutex;
 QQmlEngine *g_engine = nullptr;
 QObject *g_helper = nullptr;
+QSize activeCanvasSize();
 
 QImage loadTransferImage(const QString &path)
 {
@@ -159,6 +161,11 @@ QtObject {
                 if (!scene || !isFinite(scene.x) || !isFinite(scene.y)) return ""
                 mapped.push([scene.x, scene.y])
             }
+            // Only portrait, positive axis-aligned transforms are in scope.
+            // An invertible rotated/sheared map is not a validated viewport.
+            if (mapped[1][0] <= mapped[0][0] || mapped[2][1] <= mapped[0][1] ||
+                Math.abs(mapped[1][1]-mapped[0][1]) > 0.001 ||
+                Math.abs(mapped[2][0]-mapped[0][0]) > 0.001) return ""
             const determinant = (mapped[1][0]-mapped[0][0])*(mapped[2][1]-mapped[0][1]) -
                                 (mapped[1][1]-mapped[0][1])*(mapped[2][0]-mapped[0][0])
             if (!isFinite(determinant) || Math.abs(determinant) < 0.000001) return ""
@@ -532,6 +539,10 @@ QJsonObject diaryViewportSnapshot()
         QThread::currentThread() != QCoreApplication::instance()->thread()) return {};
     const auto context = findActivePage();
     if (!context.controller) return {};
+    // Preserve the default rM2 snapshot unchanged. Move metadata uses the same
+    // source as the live-validated probe and rejects association ambiguity.
+    if (activeCanvasSize()==QSize(954,1696))
+        return diaryVerifiedMoveSnapshot(findEngine(),runtimeObjects(),context.documentView,context.controller);
     for (QObject *object : runtimeObjects()) {
         auto *view = qobject_cast<QQuickItem *>(object);
         if (!view || !view->isVisible() || controllerProperty(object,"controller") != context.controller) continue;
@@ -556,7 +567,7 @@ QJsonObject diaryViewportSnapshot()
     return {};
 }
 
-QJsonObject insertSceneImage(const QJsonObject &request)
+QJsonObject insertSceneImage(const QJsonObject &request, const DiaryMovePlacement *boundedMove = nullptr)
 {
     const QString path = request.value("path").toString();
     if (path.isEmpty())
@@ -584,6 +595,26 @@ QJsonObject insertSceneImage(const QJsonObject &request)
             return;
         }
         if (!diaryGuard()) { operationResult = "page-changed"; return; }
+        if (boundedMove) {
+#ifndef INK_DIARY_EXPERIMENTAL_MOVE
+            operationResult="experimental-move-build-disabled"; return;
+#else
+            try {
+                // Re-read live mapping on the GUI thread immediately before
+                // mutation. A request cannot opt into this via JSON fields.
+                const auto mapping=diaryExperimentalMoveMapping(diaryViewportSnapshot(),boundedMove->viewport);
+                const QRectF crop(120,112,834,1584), footprint=boundedMove->screenBounds;
+                if(coordinateSpace!="screen" || request.value("appendBelowContent").toBool() ||
+                   !std::isfinite(x) || !std::isfinite(y) || footprint.isEmpty() ||
+                   !crop.contains(footprint) || footprint.center()!=QPointF(x,y) ||
+                   std::abs(footprint.width()*mapping.sx-image.width())>0.001 ||
+                   std::abs(footprint.height()*mapping.sy-image.height())>0.001 ||
+                   image.convertToFormat(QImage::Format_ARGB32)!=boundedMove->nativeImage.convertToFormat(QImage::Format_ARGB32)) {
+                    operationResult="invalid-bounded-move-placement"; return;
+                }
+            } catch(const std::exception &) { operationResult="unsupported-move-viewport"; return; }
+#endif
+        }
         QObject *imageView = nullptr;
         if (coordinateSpace == "screen") {
             for (QObject *object : runtimeObjects()) {

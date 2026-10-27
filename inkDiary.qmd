@@ -8,6 +8,10 @@ AFFECT [[1224665461898798997]]
         INSERT {
             Rectangle {
                 id: inkDiaryControl
+                objectName: "inkDiaryControl"
+                readonly property string diaryCaptureOwner: "ink-diary-owned-control-v1"
+                property bool diaryCaptureSuppressed: false
+                visible: !diaryCaptureSuppressed
                 z: 10000
                 anchors.right: parent.right
                 anchors.bottom: parent.bottom

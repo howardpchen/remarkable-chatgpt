@@ -56,16 +56,22 @@ inline bool diaryExperimentalMoveTuple(const QByteArray &machine, const QByteArr
 }
 inline DiaryMoveMapping diaryExperimentalMoveMapping(const QJsonObject &snapshot,
                                                       const QJsonObject &normalReference) {
-    // The live-validated read-only source supplies only verified Blank identity.
+    // Factory identity is read-only; historical one-shot builds stay Blank-only.
     // A separately provisioned exact normal reference is still mandatory.
-    if (snapshot.value("templateName").toString() != QLatin1String("Blank") ||
+    const auto name=snapshot.value("templateName").toString();
+    const bool supported=name==QLatin1String("Blank")
+#ifdef INK_MOVE_PER_REQUEST
+        || name==QLatin1String("P Dots S") || name==QLatin1String("P Grid small")
+#endif
+        ;
+    if (!supported ||
         normalReference.isEmpty() || snapshot != normalReference ||
         snapshot.value("width").toDouble() != 954 ||
         snapshot.value("height").toDouble() != 1696 ||
         snapshot.value("windowWidth").toDouble() != 954 ||
         snapshot.value("windowHeight").toDouble() != 1696 ||
         snapshot.value("devicePixelRatio").toDouble(0) != 1)
-        throw std::runtime_error("Verified Blank template and normal Move viewport required");
+        throw std::runtime_error("Supported template and normal Move viewport required");
     const auto points=snapshot.value("points").toArray();
     if (points.size()!=3) throw std::runtime_error("Move mapping requires three calibration points");
     qreal p[3][2];
@@ -88,6 +94,30 @@ inline DiaryMoveMapping diaryExperimentalMoveMapping(const QJsonObject &snapshot
 inline DiaryCaptureLayout diaryExperimentalMoveLayout(const QSize &pixels, const QSize &window,
                                                       qreal dpr) {
     return diaryCaptureLayout(pixels,window,dpr,DiaryCaptureProfile::ExperimentalMove,{120,112,834,1584});
+}
+// Only the separate live target includes the top strip. Historical offline
+// fixtures keep their measured crop and consumed-run semantics unchanged.
+inline QRect diaryMoveBoundedCaptureArea() {
+#ifdef INK_MOVE_LIVE_TEST
+    return {0,0,954,1696};
+#else
+    return {120,112,834,1584};
+#endif
+}
+// Full-page structural containers are expected; any smaller visible UI item
+// overlapping the full-screen capture must be absent, not silently cropped.
+inline bool diaryMoveCaptureUiClear(const QJsonObject &pose) {
+    if (!pose.value("ok").toBool() || !pose.value("items").isArray()) return false;
+    const QRectF content(0,0,954,1696);
+    for (const auto &entry:pose.value("items").toArray()) {
+        const auto item=entry.toObject();
+        const auto a=item.value("rect").toArray();
+        if (a.size()!=4) return false;
+        for (const auto &v:a) if (!v.isDouble() || !std::isfinite(v.toDouble())) return false;
+        const QRectF rect(a[0].toDouble(),a[1].toDouble(),a[2].toDouble(),a[3].toDouble());
+        if (rect.intersects(content) && !rect.contains(content)) return false;
+    }
+    return true;
 }
 struct DiaryMovePlacement {
     QImage nativeImage;

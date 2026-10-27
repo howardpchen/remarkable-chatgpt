@@ -5,7 +5,7 @@
 struct FakeNative final:moveDemo::NativePoseSource {
     QString error;
     int calls=0;
-    QString verifyLivePose(QQuickWindow *,const QRect &crop) override {
+    QString verifyLivePose(QQuickWindow *,const QRect &crop, bool) override {
         ++calls;assert(crop==QRect(120,112,834,1584));return error;
     }
 };

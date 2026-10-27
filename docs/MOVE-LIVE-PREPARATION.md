@@ -1,5 +1,10 @@
 # Move steps 1–3 completion — 2026-10-26
 
+> Historical scope report. Subsequent authorized deployment, one GPT-6 Luna
+> request/insertion, and full-screen capture-only validation supersede the
+> not-deployed/not-live-tested statements below. See [current readiness](MOVE-LIVE-READINESS.md).
+
+
 Historical local-preparation report. The later authorized unarmed widget
 deployment is recorded in [Move widget deployment](MOVE-WIDGET-DEPLOYMENT.md);
 its hardware observations do not imply live API or insertion testing.
@@ -102,3 +107,27 @@ dismissal/recovery/repeated toolbar cycles, suppression and missing bridge.
 Only live QML/shared host test/test runner/docs changed. No tablet changes, paid
 requests or loaded-demo QML changes. Actual hardware UI review remains pending.
 Logs: `build/widget-dismissal-20261026/`.
+
+## Follow-up: owner-selected GPT-6 Luna
+
+The owner requested replacing the deprecated GPT-4.1-mini pin with
+`gpt-6-luna`. The local live client, private-config validation, synthetic live
+fixtures and build metadata now use the new model. Requests explicitly set
+`reasoning.effort` to `none`, preserving the prior non-reasoning behavior,
+800-token output ceiling and strict single-message text parser. The Responses
+endpoint, image input, JSON schema and one-shot guards are unchanged. Official
+model documentation confirms these capabilities:
+https://developers.openai.com/api/docs/models/gpt-6-luna.
+
+This supersedes the earlier model choice in this historical report, not the
+previously observed hardware state. No tablet deployment, credential provisioning
+or paid API request occurred as part of this change. The installed artifact still
+has its prior model pin; it needs rebuilding and reviewed redeployment before the
+live test. Account access and real handwriting quality remain unverified.
+
+Local migration verification passed: 21 integrated live-runtime scenarios, 12
+synthetic transport scenarios, private-config checks (including rejection of
+the old model), and live QML interaction/binding checks. The request assertion
+checks explicit `reasoning.effort:none`. Shell syntax and `git diff --check`
+passed. Log: `build/move-live-host/luna-test.log`. No new exact-SDK cross-build
+is claimed for this model change.

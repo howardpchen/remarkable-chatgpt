@@ -10,8 +10,9 @@ installer acceptance is retained as a prototype baseline, not newly certified.
 
 See [PORT-STATUS.md](PORT-STATUS.md) for the 2026-10-26 evidence matrix and next
 gates. Move native insertion, owner-observed placement/scale, undo/redo and
-close/reopen persistence passed in a bounded offline spike. Capture remains
-blocked; Paper Pro hardware testing remains independent and pending. The
+close/reopen persistence passed in a bounded offline spike. Later full-frame capture and the narrow single-capture personal beta passed
+on the Move; see the current status matrix for exact boundaries. Standard Paper
+Pro still requires independent hardware testing. The
 checklist below is an acceptance plan, not a list of completed tests.
 
 ## Builds

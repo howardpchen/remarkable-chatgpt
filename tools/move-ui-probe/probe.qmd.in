@@ -1,0 +1,12 @@
+VERSION @EXACT_IMG_VERSION@
+; NOT A LOADABLE PATCH. Resolve every token only after exact-device proof.
+; Import version is a QtQuick language requirement, not a firmware gate.
+AFFECT @VERIFIED_DOCUMENTVIEW_RESOURCE_HASH@
+    IMPORT QtQuick 2.15
+    TRAVERSE @VERIFIED_DOCUMENTVIEW_CONTAINER_SELECTOR@
+        LOCATE AFTER ALL
+        INSERT {
+@INLINE_MOVE_UI_PROBE_RECTANGLE_WITHOUT_IMPORT@
+        }
+    END TRAVERSE
+END AFFECT

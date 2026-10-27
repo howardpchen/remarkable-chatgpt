@@ -14,12 +14,12 @@ billing for this application.
 
 ## Device support and port status
 
-Status as of **2026-10-26**:
+Status as of **2026-10-27**:
 
 | Target | Tested scope | Installation/support status |
 | --- | --- | --- |
 | reMarkable 2 | Existing OS 3.27.3.0 prototype; see [validation history](VALIDATION.md) | Version 4.1 manual prototype bundle; [installation guide](INSTALL.md) applies only to this exact target |
-| Paper Pro Move (`chiappa`) | Exact OS 3.28.0.172 / Qt 6.10.3 SDK build; real screenshots; bounded offline capture/render/insertion with owner-confirmed placement, Undo/Redo and reopen persistence; deployed widget behavior accepted by owner | Separate experimental extension/widget deployed **unarmed**; real handwriting-to-API answer untested; production installer/support disabled |
+| Paper Pro Move (`chiappa`) | Exact OS 3.28.0.172 / Qt 6.10.3 SDK build; real screenshots; bounded offline capture/render/insertion with owner-confirmed placement, Undo/Redo and reopen persistence; deployed widget behavior accepted by owner | Narrow personal beta accepted for Blank, Dots small and Grid small at normal portrait zoom; live placement and owner Undo/Redo/reopen verified; production installer/support disabled |
 | Full-size Paper Pro (`ferrari`) | Build-target preparation; independent device validation pending | Production installer/support disabled; Move results do not certify this device |
 
 **Do not run the rM2 installer on either Paper Pro model.** The port does not
@@ -42,11 +42,13 @@ There are two distinct experiments:
   Readable placement, Undo/Redo and reopen persistence passed on the disposable
   Blank page. This did **not** recognize handwriting or call an AI model. Its
   one-shot permissions are consumed and must not be reset or replayed.
-- **Separate live-text target:** a single-request OpenAI client and its widget
-  are implemented and deployed, but **Start remains disabled** until secure
-  configuration and a fresh reviewed run reference are provisioned. Host tests
-  cover the request/schema, cancellation, context changes, fit and teardown;
-  they are not evidence of a successful live answer on the tablet.
+- **Separate live-text target:** one authorized GPT-6 Luna request completed and
+  a native insertion was reported. An independently checked screenshot shows a
+  visible 2×2 table below the handwritten request. This is one narrow successful
+  example, not broad recognition-quality validation. The owner confirmed live-run Undo/Redo and
+  close/reopen worked at the time. The run is consumed; do not reset or replay it.
+  Later full-screen capture-only checks verified toolbar hiding/restoration and
+  pixel-identical before/after frames without another API call or insertion.
 
 Qt window capture was unavailable on this Move release; the supported `rm-shot` /
 framebuffer-spy path subsequently passed actual screenshot checks. These are
@@ -63,28 +65,39 @@ separate results, not interchangeable capture methods.
 - While a request is busy, the **360×176** panel remains expanded with **Cancel**;
   × and − are unavailable. Completion/cancel returns to the launcher. This busy
   path is host-tested; no paid request was made during widget verification.
-- Screenshot capture temporarily suppresses our control and restores it afterward;
-  it does not change the native toolbar settings.
+- Full-screen capture temporarily hides the native toolbar, close button and our
+  control, then restores the prior state; it does not change persistent settings.
+  Widget destruction intentionally remains an exception to restoration.
 
 The idle/expand/dismiss/restore UI was accepted by the owner on the Move.
 The expanded capture footprint, page/viewport/native-pose checks, exact pixel
 freshness, visible-space fit and durable one-shot guards remain in force.
-The current experiment is limited to the reviewed portrait, normal-zoom,
+The earlier bounded experiment was limited to the reviewed portrait, normal-zoom,
 **Blank-template** pose. It does not certify arbitrary transforms, dark/dotted
 templates or answers extending below the visible crop. An earlier hardware
 shutdown crash remains unexplained despite later clean stop/start verification.
 
-### Next milestone: one real text answer
+The later **per-request v4 experimental beta** also supports the exact factory
+**Dots small** and **Grid small** templates at normal portrait zoom, with one
+reusable device setup profile. Both passed live recognition and answer-placement
+checks and owner-confirmed Undo/Redo/close-reopen on 2026-10-27. The model still receives the original background; only local
+placement analysis excludes the repeating pattern, including native grid dither.
+This is not arbitrary-template or production installer support. See the
+[per-request notes](tools/move-session/README.md) for boundaries and test details.
 
-1. Confirm model availability and a bounded test budget. The current live client
-   pins `gpt-4.1-mini`; it does not silently substitute another model.
-2. Stage and verify a secure hidden-entry helper, then provision the owner-only
-   configuration. Intended configuration paths are not proof that the file or
-   helper already exists on a tablet.
-3. Review a fresh disposable Blank page, actual native UI/viewport and installed
-   artifact hashes; create a new reference without resetting old consumed runs.
-4. Under explicit live-test authority, run one handwritten question and verify
-   answer quality, placement, Undo/Redo, reopen persistence and device health.
+### Next milestone: harden lifecycle reliability
+
+1. The owner has confirmed Undo, Redo and close/reopen worked for the earlier
+   live insertion. That bounded milestone is complete; do not repeat its request.
+2. Investigate the unexplained notebook-app shutdown crash. Later clean stops
+   are not proof of a fix. Begin with saved shutdown/teardown evidence and host
+   tests; any new hardware restart experiment needs its own scoped approval.
+3. Only then expand the test matrix, using fresh references and new run directories
+   for separately authorized requests. Keep prior consumed markers intact.
+
+The local-only credential helper hardening and detailed recovery sequence are in
+[Move live readiness](docs/MOVE-LIVE-READINESS.md). It is not deployed merely by
+building it. No production promotion or broader feature support is claimed.
 
 The Move live-text target currently excludes web search, image generation, plots
 and specialized diagram/template routing. Those features in the rM2 guide below

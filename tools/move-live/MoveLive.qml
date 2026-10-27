@@ -16,14 +16,28 @@ Rectangle {
     height: panelExpanded ? 176 : 72
     readonly property string diaryCaptureOwner: "ink-diary-owned-control-v1"
     property bool diaryCaptureSuppressed: false
-    // Read the existing lexical bridge; never alter native toolbar properties.
+    // Reuse the exact lexical bridge; the capture-only Binding below restores
+    // the original native visibility binding/value, not an imperative overwrite.
     // Unknown/missing state must not offer dismissal without a recovery signal.
     readonly property var nativeToolbar: (parent !== null &&
-        typeof parent.diaryNativePoseObjects !== "undefined" && parent.diaryNativePoseObjects
+        typeof parent.diaryNativePoseObjects !== "undefined" && parent.diaryNativePoseObjects &&
+        typeof parent.diaryNativePoseObjects.toolbar !== "undefined"
         ? parent.diaryNativePoseObjects.toolbar : null)
     readonly property bool toolbarsHidden: (nativeToolbar !== null &&
         typeof nativeToolbar !== "undefined" &&
         typeof nativeToolbar.shown === "boolean" && nativeToolbar.shown === false)
+    readonly property bool nativeCaptureReady: (nativeToolbar !== null &&
+        typeof nativeToolbar.visible === "boolean" && nativeToolbar.visible === false &&
+        typeof nativeToolbar.shown === "boolean" && nativeToolbar.shown === false)
+    Binding {
+        target: moveUiProbe.nativeToolbar
+        property: "visible"
+        value: false
+        when: moveUiProbe.diaryCaptureSuppressed && moveUiProbe.nativeToolbar !== null
+        restoreMode: Binding.RestoreBindingOrValue
+    }
+    // Owner-intended exception: widget destruction need not restore native
+    // visibility. Normal capture lease release still restores the prior state.
     property bool dismissedUntilToolbar: false
     onToolbarsHiddenChanged: {
         if (!toolbarsHidden) dismissedUntilToolbar = false;

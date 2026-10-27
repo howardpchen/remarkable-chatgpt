@@ -2,7 +2,9 @@
 #ifndef INK_MOVE_LIVE_TEST
 #error "This client belongs only to the separate bounded live-test artifact"
 #endif
+#include "config.h"
 #include "../../src/response.h"
+#include "../../src/capture-layout.h"
 #include <QBuffer>
 #include <QFile>
 #include <QJsonDocument>
@@ -20,55 +22,33 @@
 
 namespace moveLive {
 inline constexpr int outputTokens=800;
-inline constexpr auto model="gpt-4.1-mini";
-// Open only the expected private regular file, without following a symlink.
-// No credential contents enter status, exceptions, evidence, or logs.
-inline QString loadKey(const QString &path) {
-    int fd=::open(QFile::encodeName(path).constData(),O_RDONLY|O_NOFOLLOW|O_CLOEXEC|O_NONBLOCK);
-    if(fd<0) throw std::runtime_error("Private API configuration missing");
-    struct stat st{};
-    if(::fstat(fd,&st)!=0 || !S_ISREG(st.st_mode) || st.st_uid!=::geteuid() ||
-       (st.st_mode&0777)!=0600 || st.st_nlink!=1 || st.st_size<1 || st.st_size>16384) {
-        ::close(fd); throw std::runtime_error("API configuration must be owner-only regular file (0600)");
-    }
-    QFile file;
-    if(!file.open(fd,QIODevice::ReadOnly,QFileDevice::AutoCloseHandle)) {
-        ::close(fd);throw std::runtime_error("Cannot read API configuration");
-    }
-    QJsonParseError error;
-    auto doc=QJsonDocument::fromJson(file.read(16385),&error);
-    auto config=doc.object();
-    const auto key=config.value("api_key").toString();
-    if(error.error!=QJsonParseError::NoError || !doc.isObject() ||
-       !QRegularExpression("^[A-Za-z0-9_-]{1,512}$").match(key).hasMatch() ||
-       config.value("model").toString()!=model || config.value("demo_mode").toBool(false))
-        throw std::runtime_error("Live test requires API key, gpt-4.1-mini, and no demo mode");
-    return key;
-}
 inline QJsonObject payload(const QImage &image) {
-    if(image.size()!=QSize(834,1584)) throw std::runtime_error("Unexpected live question dimensions");
+    if(image.size()!=diaryMoveBoundedCaptureArea().size()) throw std::runtime_error("Unexpected live question dimensions");
     QByteArray png;QBuffer buffer(&png);buffer.open(QIODevice::WriteOnly);
     if(!image.save(&buffer,"PNG") || png.size()>8*1024*1024) throw std::runtime_error("Question encoding failed");
-    QJsonObject fields{{"kind",QJsonObject{{"type","string"},{"enum",QJsonArray{"text","unsupported"}}}},
+    QJsonObject fields{{"kind",QJsonObject{{"type","string"},{"enum",QJsonArray{"text","needs_web","clarification","unsupported"}}}},
         {"text",QJsonObject{{"type","string"}}}};
     QJsonObject format{{"type","json_schema"},{"name","move_text_answer"},{"strict",true},
         {"schema",QJsonObject{{"type","object"},{"properties",fields},
             {"required",QJsonArray{"kind","text"}},{"additionalProperties",false}}}};
     return {{"model",model},{"store",false},{"max_output_tokens",outputTokens},
+        {"reasoning",QJsonObject{{"effort","none"}}},
         {"instructions","Read the latest unanswered handwritten question. Earlier writing may contain prior answers. "
             "Give a concise ordinary text answer in the question's language, usually under 100 words. "
-            "If handwriting is unclear, ask briefly for clarification; do not invent it. "
-            "Use kind=text and simple Markdown, no HTML or external image URLs. "
-            "This test has no tools. Requests for current facts, online verification, sources, search, generated "
-            "images, plots, diagrams or templates MUST return kind=unsupported with a short explanation, "
-            "not fabricated results. Never claim to have searched or generated an image."},
+            "If the latest question is missing, unreadable or ambiguous, return kind=clarification; do not guess or answer an earlier question. "
+            "For answerable questions use kind=text and simple Markdown, no HTML or external image URLs. "
+            "This test has no tools. Requests needing current or latest facts, online verification, source lookup or search "
+            "MUST return kind=needs_web, not an unverified answer. Requests for generated images, plots, diagrams "
+            "or templates MUST return kind=unsupported. For every non-text kind set text to an empty string; "
+            "the app displays its own explanation. Never claim to have searched or generated an image."},
         {"input",QJsonArray{QJsonObject{{"role","user"},{"content",QJsonArray{
             QJsonObject{{"type","input_text"},{"text","Answer the latest unanswered question on this page."}},
             QJsonObject{{"type","input_image"},{"detail","high"},
                 {"image_url","data:image/png;base64,"+QString::fromLatin1(png.toBase64())}}
         }}}}}, {"text",QJsonObject{{"format",format}}}};
 }
-inline QString parse(const QJsonObject &root) {
+struct ParsedAnswer { QString text; QString notice; };
+inline ParsedAnswer parse(const QJsonObject &root) {
     // Reject refusals/tool activity, rather than rendering their content as an answer.
     int messages=0,parts=0;
     for(const auto &value:root.value("output").toArray()) {
@@ -86,11 +66,30 @@ inline QString parse(const QJsonObject &root) {
     auto doc=QJsonDocument::fromJson(responseText(root).toUtf8(),&error);
     auto answer=doc.object();
     if(error.error!=QJsonParseError::NoError || !doc.isObject() || answer.size()!=2 ||
-       !answer.value("kind").isString() || !answer.value("text").isString() ||
-       answer.value("kind")!="text") throw std::runtime_error("Unsupported request or malformed text answer");
+       !answer.value("kind").isString() || !answer.value("text").isString())
+        throw std::runtime_error("Malformed text answer");
+    const auto kind=answer.value("kind").toString();
+    // Fixed local notices: never log provider question transcriptions or insert
+    // unsupported/uncertain results into the notebook. No retries or extra calls.
+    if(kind=="needs_web")return {{},"Needs web access; search is off."};
+    if(kind=="clarification")return {{},"Cannot read question. Please rewrite."};
+    if(kind=="unsupported")return {{},"Text answers only; try another question."};
+    if(kind!="text")throw std::runtime_error("Unknown answer kind");
     auto text=answer.value("text").toString().trimmed();
     if(text.isEmpty() || text.size()>4000) throw std::runtime_error("Empty or oversized text answer");
-    return text;
+    return {text,{}};
+}
+// Only numeric transport metadata and allowlisted provider codes may reach UI/logs.
+// Never copy errorString(), response messages, headers, URLs or response bodies.
+inline QString transportFailure(int status,QNetworkReply::NetworkError networkError,const QByteArray &body) {
+    QString result=status>0 ? QString("OpenAI HTTP %1").arg(status) : QString("OpenAI connection failure (no HTTP response)");
+    result+=QString("; Qt network error %1").arg(int(networkError));
+    const auto code=QJsonDocument::fromJson(body).object().value("error").toObject().value("code").toString();
+    for(const auto allowed:{"rate_limit_exceeded","insufficient_quota","invalid_api_key","model_not_found",
+                           "unsupported_parameter","invalid_value","server_error"}) {
+        if(code==QLatin1String(allowed)) {result+="; "+code;break;}
+    }
+    return result+"; no retry";
 }
 // GUI-thread asynchronous transport: no nested event loop, detached worker,
 // retries, redirect following, insecure TLS fallback, or notebook persistence.
@@ -104,7 +103,11 @@ public:
     ~Client() override {cancel();}
     void cancel() {
         timeout_.stop();done_={};valid_={};
-        if(reply_) {auto *r=reply_.data();reply_.clear();disconnect(r,nullptr,this,nullptr);r->abort();r->deleteLater();}
+        if(reply_) {auto *r=reply_.data();reply_.clear();disconnect(r,nullptr,this,nullptr);r->abort();r->deleteLater();
+#ifdef INK_MOVE_PER_REQUEST
+            qInfo("ink-move lifecycle reply-abort-complete");
+#endif
+        }
         bytes_.clear();
     }
     void start(const QImage &image,const QString &key,std::function<bool()> valid,Done done,
@@ -119,6 +122,9 @@ public:
         auto *manager=injected;
         if(!manager) manager=new QNetworkAccessManager(this);
         reply_=manager->post(request,body);
+#ifdef INK_MOVE_PER_REQUEST
+        qInfo("ink-move lifecycle request-posted");
+#endif
         reply_->setReadBufferSize(65536);
         connect(reply_,&QNetworkReply::readyRead,this,[this]{drain();});
         connect(reply_,&QNetworkReply::finished,this,[this]{complete();});
@@ -138,15 +144,24 @@ private:
         return true;
     }
     void complete() {
+#ifdef INK_MOVE_PER_REQUEST
+        qInfo("ink-move lifecycle reply-finished");
+#endif
         if(!drain())return;
         if(!valid_ || !valid_()) {finish({},"Cancelled or page changed during API request");return;}
-        if(reply_->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt()!=200 || reply_->error()!=QNetworkReply::NoError) {
-            finish({},"OpenAI HTTP/network failure; no retry");return;
+        const int httpStatus=reply_->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        if(httpStatus!=200 || reply_->error()!=QNetworkReply::NoError) {
+            const auto failure=transportFailure(httpStatus,reply_->error(),bytes_);
+#ifdef INK_MOVE_PER_REQUEST
+            qInfo("ink-move transport %s",qPrintable(failure));
+#endif
+            finish({},failure);return;
         }
         try {
             QJsonParseError error;const auto doc=QJsonDocument::fromJson(bytes_,&error);
             if(error.error!=QJsonParseError::NoError || !doc.isObject())throw std::runtime_error("Invalid API JSON");
-            finish(parse(doc.object()),{});
+            const auto answer=parse(doc.object());
+            finish(answer.text,answer.notice);
         } catch(const std::exception &e) {finish({},QString::fromUtf8(e.what()));}
     }
     void finish(QString text,QString error) {

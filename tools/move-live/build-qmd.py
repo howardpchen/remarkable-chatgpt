@@ -10,9 +10,10 @@ parser.add_argument('--qmldiff', required=True, type=Path)
 parser.add_argument('--hashtab', required=True, type=Path)
 parser.add_argument('--qml-root', required=True, type=Path)
 parser.add_argument('--output', required=True, type=Path, help='New private directory; must not exist')
+parser.add_argument('--widget', type=Path, help='Explicit local candidate QML; default is validated one-shot widget')
 args = parser.parse_args()
 repo = Path(__file__).resolve().parents[2]
-qml = '\n'.join(line for line in (repo / 'tools/move-live/MoveLive.qml').read_text().splitlines()
+qml = '\n'.join(line for line in (args.widget or (repo / 'tools/move-live/MoveLive.qml')).read_text().splitlines()
                 if not line.startswith('import '))
 raw = ('VERSION 3.28.0.172\nAFFECT /qml/device/view/documentview/DocumentView.qml\n'
        ' IMPORT net.asivery.XoviMessageBroker 2.0\n TRAVERSE FocusScope#root\n'

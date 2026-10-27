@@ -118,3 +118,83 @@ behavior. A subsequent **separate offline spike** passed one synthetic insertion
 with owner-observed placement/scale, undo/redo and close/reopen persistence;
 Qt window capture failed. See the [current evidence matrix](../../docs/PORT-STATUS.md).
 The diagnostic described here still never captures or inserts anything.
+
+## Bounded embedded-resource and template preparation (2026-10-26)
+
+Local source now supports `document-view-resource` (metadata only) and fixed
+`document-view-resource-chunk-0` through `-15` requests. Only the embedded
+`:/qml/device/view/documentview/DocumentView.qml` resource is readable; no
+caller-supplied path. Total cap1MiB, chunk64KiB, whole-file SHA256 in each reply.
+Unknown requests fail closed. Proprietary output stays in private reports,
+never in this repository or publication. Missing/oversize resources reject.
+
+The resource-only diagnostic was hardware-verified:163922 bytes, three chunks,
+SHA256 c4b4347578f972ee9ad182606edcb4de07ea8e3eee1f3ea6f9b5a6311f4ecf0c.
+Initial128KiB limit rejected this file; the bounded chunk variant succeeded.
+Host synthetic resources verified missing, valid and over-budget handling.
+
+`readonly-template.h` follows this verified resource's read-only
+`document.templateForPage(currentPage)` usage. Installed template catalog maps
+Blank to filename `Blank`. Only blank/nonblank/unavailable is returned; no
+page index, ID or arbitrary template name escapes. Host tests passed with a
+real QQmlEngine and mock document, including missing/invalid context and retained
+object ownership. Live template-status behavior is NOT yet verified.
+
+The combined UI/template load was interrupted by the *previous* xochitl process
+segfaulting during shutdown, followed by reboot. There is no evidence that the
+new artifact initialized. It was quarantined; prior probe34222109...724a and
+all baseline mods/QMD hashes were restored and mapped in stable PID865, zero
+restarts, read-only root. Do not reload/retry until shutdown incident is reviewed.
+Source capability is therefore newer than the currently loaded diagnostic.
+
+### Local-only normal-reference metadata preparation
+
+The diagnostic now includes a fixed numeric `viewport` on supported visible-view
+candidates: view/window dimensions, DPR, and scene mappings of screen points
+`(0,0)`, `(100,0)`, `(0,100)`. Missing window, hidden/zero-size view,
+non-finite/degenerate/reflected/rotated/sheared mapping returns no viewport.
+This is measured metadata, **not proof of normal zoom** or runtime eligibility;
+the production experimental policy additionally requires uniform mapping and an
+independently verified normal reference. Runtime snapshot template identity is
+still unwired and fails closed. Nothing here promotes the default runtime.
+
+`controllerOrdinal` associates document-controller and visible-view candidates
+within **one response only**, without exposing pointers or document/page IDs.
+Zero means no controller. Ordinals are traversal-local and must never be compared
+between calls. A baseline is usable only with exactly one loaded active document
+and one supported visible view associated with its nonzero ordinal; ambiguous or
+truncated scans reject. Window geometry in the viewport must match the expected
+Move window. Do not combine template status from one controller with another view.
+
+Live metadata remains **UNVALIDATED**. The next device phase must activate only
+the diagnostic artifact after a separately verified clean stop, keeping the
+already validated UI patch unchanged. With a disposable notebook, collect Blank
+at owner-confirmed portrait/normal zoom; change only to dots and require the
+matching template status to change from blank to nonblank; restore Blank and
+require blank. Change only zoom and require three-point geometry to change;
+restore the exact normal viewport and verify all numeric fields return to the
+baseline. Stop on unavailable/ambiguous metadata or unchanged geometry after a
+confirmed zoom change. No capture, insertion, API, production promotion, or new
+consumption-guard reset is part of this test.
+
+## Local lifecycle regression coverage
+
+Run `bash tools/diagnostic/test-lifecycle.sh` with a working host Qt6 development
+and offscreen-platform environment. This exercises the actual read-only mapping
+and template helpers (not copied implementations): 8 combinations of C++/JS
+ownership, QObject parenting and engine-first/view-first destruction; 512 helper
+calls interleaved with garbage collection; root/document ownership and exactly
+once destruction checks. It also checks context-bound queued callback removal.
+
+The harness verifies that `aboutToQuit` fires while the application still exists
+and `QCoreApplication::closingDown()` is false. Therefore neither app existence
+nor that flag alone is a complete late-intake guard for the current blocking
+broker dispatch. No new dispatch guard is introduced by this test. Operators
+must quiesce broker exchanges before a separately reviewed reload; do not submit
+requests during application teardown. A context-bound queued callback being
+removed after destruction does not prove an already-blocked caller can safely
+wait through shutdown.
+
+These host checks do not emulate XOVI/broker/other-extension unload, target
+firmware objects, rendering threads, or the recorded tablet SIGSEGV. Passing
+checks establish local ownership/lifetime behavior, not a shutdown-crash fix.

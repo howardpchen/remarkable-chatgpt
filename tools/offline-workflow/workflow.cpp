@@ -1,9 +1,15 @@
+#if defined(INK_MOVE_SINGLE_CAPTURE) && (!defined(INK_MOVE_LIVE_TEST) || !defined(INK_MOVE_PER_REQUEST))
+#error "Single capture is only an explicitly built per-request live trial"
+#endif
 // Shared bounded capture/render/insertion workflow; no production Move support.
 // Default is a fixed offline fixture. Separate live build freezes the question
 // before networking and accepts text only through its validated C++ client.
 #include "../diagnostic/probe.cpp"
 #include "../../src/capture-layout.h"
 #include "../../src/layout.h"
+#ifdef INK_MOVE_PER_REQUEST
+#include "../../src/move-template-ink.h"
+#endif
 #include "../../src/markdown.h"
 #include <QDir>
 #include <QFontDatabase>
@@ -13,23 +19,43 @@
 #include <functional>
 #include <unistd.h>
 #include <fcntl.h>
+#ifdef INK_MOVE_LIVE_TEST
+#include "../move-live/run-directory.h"
+#endif
 #ifndef INK_WORKFLOW_HOST_TEST
 #include "xovi.h"
 #endif
 namespace workflow {
+#ifdef INK_MOVE_PER_REQUEST
+#ifdef INK_WORKFLOW_HOST_TEST
+const QString sessionRoot=QString::fromLocal8Bit(qgetenv("INK_WORKFLOW_TEST_DIR"));
+const QString fontBase=QStringLiteral("fonts");
+#else
+const QString sessionRoot=QString::fromLatin1(moveLive::runDirectory);
+const QString fontBase=sessionRoot;
+#endif
+QString base=sessionRoot;
+#endif
+#ifndef INK_MOVE_PER_REQUEST
 #ifdef INK_WORKFLOW_HOST_TEST
 const QString base=QString::fromLocal8Bit(qgetenv("INK_WORKFLOW_TEST_DIR"));
 std::function<char *(char *)> captureHandler;
 const QString fontBase=QStringLiteral("fonts");
 #else
 #if defined(INK_MOVE_LIVE_TEST)
-const QString base=QStringLiteral("/home/root/xovi/move-live-text-v1");
+const QString base=QString::fromLatin1(moveLive::runDirectory);
 #elif defined(INK_MOVE_DEMO)
 const QString base=QStringLiteral("/home/root/xovi/move-demo-capture-v2");
 #else
 const QString base=QStringLiteral("/home/root/xovi/offline-workflow-v1");
 #endif
 const QString fontBase=base;
+#endif
+#endif
+#ifdef INK_MOVE_PER_REQUEST
+#ifdef INK_WORKFLOW_HOST_TEST
+std::function<char *(char *)> captureHandler;
+#endif
 #endif
 struct Page { QQuickWindow *window=nullptr; QObject *document=nullptr; QObject *controller=nullptr; QQuickItem *view=nullptr; QString id; bool truncated=false; };
 Page current() {
@@ -59,6 +85,21 @@ Page current() {
     }
     if(windows!=1 || documents!=1 || views!=1 || p.truncated)return {};
     return p;
+}
+int placementInkRow(const QImage &image) {
+#ifdef INK_MOVE_PER_REQUEST
+    const auto p=current();
+    if(!p.view || !p.document)return image.height()-1;
+    const auto name=diaryMetadata::captureTemplateName(qmlEngine(p.view),p.document);
+    const auto snap=diagnostic::viewportSnapshot(qmlEngine(p.view),p.view);
+    const auto points=snap.value("points").toArray();
+    if(points.size()!=3)return image.height()-1;
+    const double scale=(points[1].toArray()[0].toDouble()-points[0].toArray()[0].toDouble())/100;
+    try {return moveTemplateInk::lastRow(image,name,scale);}
+    catch(const std::exception &) {return image.height()-1;} // no placement space on uncertainty
+#else
+    return lastInkRow(image);
+#endif
 }
 // Only fixed code is evaluated; no user script, path, or expression is accepted.
 bool validDimensions(qreal width,qreal height) {
@@ -154,9 +195,15 @@ QJsonObject run(const QJsonObject &request) {
         if(crop.size()!=4)return fail("explicit-measured-crop-required");
         for(const auto &v:crop)if(!v.isDouble() || !std::isfinite(v.toDouble()) || v.toDouble()!=v.toInt(-1))return fail("invalid-crop");
         area=QRect(crop[0].toInt(),crop[1].toInt(),crop[2].toInt(),crop[3].toInt());
-        // Exclude the observed left toolbar and top-right close control.
-        // The caller must still measure and approve the actual content rectangle.
+        // Historical offline fixtures exclude native UI geometrically.
+        // The live target instead requires the reviewed fully suppressed pose.
+#ifdef INK_MOVE_LIVE_TEST
+        // Exact live crop only; the controller verifies all native UI
+        // at admission and both suppressed capture boundaries.
+        if(area!=diaryMoveBoundedCaptureArea())return fail("invalid-live-crop");
+#else
         if(area.x()<112 || area.y()<112)return fail("crop-includes-observed-ui");
+#endif
         try {diaryCaptureLayout({954,1696},{954,1696},1,DiaryCaptureProfile::ExperimentalMove,area);}
         catch(const std::exception &){return fail("invalid-crop");}
         if(!QDir().mkpath(base) || !QFile::setPermissions(base,QFileDevice::ReadOwner|QFileDevice::WriteOwner|QFileDevice::ExeOwner))return fail("private-directory-failed");
@@ -178,20 +225,37 @@ QJsonObject run(const QJsonObject &request) {
     if(readQuestion || op=="render" || op=="insert") {
         const bool first=readQuestion || op=="render";
 #ifdef INK_MOVE_LIVE_TEST
-        const auto expected=readQuestion?Phase::Capturing:(first?Phase::AwaitingAnswer:Phase::Verifying);
+        const auto expected=readQuestion?Phase::Capturing:(first?Phase::AwaitingAnswer:
+#ifdef INK_MOVE_SINGLE_CAPTURE
+            Phase::Rendered
+#else
+            Phase::Verifying
+#endif
+        );
 #else
         const auto expected=first?Phase::Capturing:Phase::Verifying;
 #endif
         if(phase!=expected)return fail("wrong-phase");
-        if(!(first && phase==Phase::AwaitingAnswer) && captureClock.elapsed()>10000){phase=Phase::Cancelled;return fail("capture-timeout");}
-        const QImage screen(base+(first?"/question.png":"/check.png"));
+        const bool frozenImageOnly=
+#ifdef INK_MOVE_SINGLE_CAPTURE
+            !first ||
+#endif
+            (first && phase==Phase::AwaitingAnswer);
+        if(!frozenImageOnly && captureClock.elapsed()>10000){phase=Phase::Cancelled;return fail("capture-timeout");}
+        const QImage screen(base+
+#ifdef INK_MOVE_SINGLE_CAPTURE
+            "/question.png"
+#else
+            (first?"/question.png":"/check.png")
+#endif
+        );
         if(screen.isNull())return fail("capture-pending");
         if(screen.size()!=QSize(954,1696)){phase=Phase::Cancelled;return fail("capture-geometry-changed");}
         if(!fresh(current())){phase=Phase::Cancelled;return fail("context-changed-during-capture");}
         const auto cropped=screen.copy(area);
         #ifdef INK_MOVE_LIVE_TEST
         if(readQuestion) {
-            if(lastInkRow(cropped)<0){phase=Phase::Cancelled;return fail("no-visible-ink");}
+            if(placementInkRow(cropped)<0){phase=Phase::Cancelled;return fail("no-visible-ink");}
             question=cropped; phase=Phase::AwaitingAnswer;
             return {{"ok",true}};
         }
@@ -200,7 +264,7 @@ QJsonObject run(const QJsonObject &request) {
         }
 #endif
         if(op=="render") {
-            const int last=lastInkRow(cropped);
+            const int last=placementInkRow(cropped);
             if(last<0){phase=Phase::Cancelled;return fail("no-visible-ink");}
             const int font=QFontDatabase::addApplicationFont(fontBase+"/Caveat.ttf");
             if(font<0 || QFontDatabase::addApplicationFont(fontBase+"/DejaVuSansMono.ttf")<0){phase=Phase::Cancelled;return fail("fixture-fonts-missing");}
@@ -210,7 +274,13 @@ QJsonObject run(const QJsonObject &request) {
 #else
                 fixedResponse,
 #endif
-QFontDatabase::applicationFontFamilies(font).first(),area.width()).image;}
+QFontDatabase::applicationFontFamilies(font).first(),
+#ifdef INK_MOVE_LIVE_TEST
+834 // Keep answer placement clear of the restored left toolbar.
+#else
+area.width()
+#endif
+).image;}
             catch(const std::exception &){phase=Phase::Cancelled;return fail("render-failed");}
             const auto pts=QJsonDocument::fromJson(originGeometry.toUtf8()).object().value("points").toArray();
             const auto zero=pts[0].toArray(),dx=pts[1].toArray(),dy=pts[2].toArray();
@@ -226,14 +296,24 @@ QFontDatabase::applicationFontFamilies(font).first(),area.width()).image;}
             if(answer.isNull() || top+screenHeight>area.y()+area.height()){phase=Phase::Cancelled;return fail("answer-does-not-fit-visible-crop");}
             if(!answer.save(base+"/answer.png") || !QFile::setPermissions(base+"/answer.png",QFileDevice::ReadOwner|QFileDevice::WriteOwner)){phase=Phase::Cancelled;return fail("answer-save-failed");}
             question=cropped;
-            const qreal x=area.x()+area.width()/2.0,y=top+screenHeight/2.0;
+            const qreal x=
+#ifdef INK_MOVE_LIVE_TEST
+                120+834/2.0,
+#else
+                area.x()+area.width()/2.0,
+#endif
+                y=top+screenHeight/2.0;
             target=QPointF(zero[0].toDouble()+x*sx,zero[1].toDouble()+y*sy);
             if(!std::isfinite(target.x()) || !std::isfinite(target.y())){phase=Phase::Cancelled;return fail("invalid-insertion-target");}
             phase=Phase::Rendered;
             return {{"ok",true},{"fixtureOnly",fixtureOnly},{"answerWidth",answer.width()},{"answerHeight",answer.height()},
                 {"screenWidth",screenWidth},{"screenHeight",screenHeight},{"lastInkRow",last},{"answerTop",top},{"verifiedPlaced",false}};
         }
+#ifndef INK_MOVE_SINGLE_CAPTURE
         if(!samePixels(cropped,question)){phase=Phase::Cancelled;return fail("page-pixels-changed");}
+#endif
+        // Single-capture trial intentionally cannot detect same-page ink edits.
+        // Answer integrity, native signature, context and durable claim stay enforced.
         if(!samePixels(QImage(base+"/answer.png"),answer)){phase=Phase::Cancelled;return fail("answer-pixels-changed");}
         if(diagnostic::signatures(p.controller,"insertImageFileAsSceneItem")!=QJsonArray{QStringLiteral("insertImageFileAsSceneItem(QUrl,QPointF)")})return fail("unexpected-insertion-signature");
         if(!fresh(current())){phase=Phase::Cancelled;return fail("context-changed-before-insertion");}

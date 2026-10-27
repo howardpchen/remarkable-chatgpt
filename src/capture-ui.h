@@ -13,7 +13,8 @@
 #include <memory>
 #include <vector>
 
-// Own controls only. Never writes `visible`: doing that destroys QML bindings.
+// Own suppression flags only; optional native hiding is a binding-preserving
+// capture-only QML Binding in the live widget. No imperative visible writes.
 // All public operations, construction and destruction MUST run on the GUI
 // thread. A worker may wait for the callback, but the GUI thread must stay free.
 // Ready acknowledges a Qt Quick render, NOT framebuffer-spy/e-ink freshness.
@@ -109,6 +110,11 @@ public:
         for (const auto &item : controls_) {
             if (!item || item->window() != window_ || item->isVisible() ||
                 !item->property("diaryCaptureSuppressed").toBool()) return false;
+            // An optional read-only acknowledgement comes from the live widget's
+            // native toolbar Binding. Missing is allowed for historical demos;
+            // the live admission separately requires the exact hidden pose.
+            const auto nativeReady=item->property("nativeCaptureReady");
+            if (nativeReady.isValid() && (nativeReady.metaType().id()!=QMetaType::Bool || !nativeReady.toBool())) return false;
             if (std::find(live.begin(), live.end(), item.data()) == live.end()) return false;
         }
         return true;

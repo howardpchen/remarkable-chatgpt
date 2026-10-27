@@ -18,10 +18,13 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <cerrno>
+#ifdef INK_MOVE_LIVE_TEST
+#include "../move-live/run-directory.h"
+#endif
 
 namespace moveDemo {
 #ifdef INK_MOVE_LIVE_TEST
-inline constexpr const char *attemptDirectory = "/home/root/xovi/move-live-text-v1";
+inline constexpr const char *attemptDirectory = moveLive::runDirectory;
 #else
 inline constexpr const char *attemptDirectory = "/home/root/xovi/move-demo-capture-v2";
 #endif
@@ -35,7 +38,7 @@ inline constexpr const char *evidenceProfile = "chiappa-3.28.0.172-qt6.10.3-prob
 class NativePoseSource {
 public:
     virtual ~NativePoseSource() = default;
-    virtual QString verifyLivePose(QQuickWindow *window, const QRect &crop) = 0;
+    virtual QString verifyLivePose(QQuickWindow *window, const QRect &crop, bool suppressed) = 0;
 };
 
 inline QString inspectOwnControl(QQuickWindow *window, bool suppressed) {
@@ -137,7 +140,7 @@ private:
         try {diaryExperimentalMoveMapping(viewport,reference_);}
         catch (...) {return "viewport-not-exact-reviewed-blank-reference";}
         if (!native_) return "live-native-pose-source-required";
-        return native_->verifyLivePose(window_,QRect(120,112,834,1584));
+        return native_->verifyLivePose(window_,diaryMoveBoundedCaptureArea(),suppressed);
     }
     QPointer<QQuickWindow> window_;
     QPointer<QQuickItem> document_;

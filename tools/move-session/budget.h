@@ -14,7 +14,7 @@ namespace moveSession {
 inline constexpr qint64 budgetTotal=5000000000LL; // integer nano-USD
 inline constexpr qint64 inputRate=275, outputRate=825;
 inline constexpr qint64 budgetReservation=922000LL*inputRate+800LL*outputRate;
-struct BudgetState { bool ok=false; qint64 available=0; int next=0; };
+struct BudgetState { bool ok=false; qint64 available=0, charged=0, unsettledReserved=0; int attempts=0, unsettledAttempts=0, next=0; };
 inline bool budgetInteger(QJsonValue v,qint64 maximum,qint64 &out) {
     const double n=v.toDouble(-1);
     if(!v.isDouble() || !std::isfinite(n) || n<0 || n>double(maximum) || std::floor(n)!=n)return false;
@@ -72,11 +72,13 @@ inline BudgetState budgetScan(int fd) {
             else valid=false;
         }
         ::close(request);
+        ++state.attempts;
+        if(raw.isEmpty()) {++state.unsettledAttempts;state.unsettledReserved+=charge;}
         spent+=charge;
         if(!valid || spent>total){valid=false;break;}
     }
     ::closedir(dir);
-    if(valid) {state.ok=true;state.available=total-spent;}
+    if(valid) {state.ok=true;state.available=total-spent;state.charged=spent;}
     return state;
 }
 inline BudgetState budgetStatus(const QString &root) {

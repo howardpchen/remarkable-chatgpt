@@ -9,6 +9,7 @@
 #ifdef INK_MOVE_PER_REQUEST
 #include "../move-session/quota.h"
 #include "../move-session/page-profile.h"
+#include "../remarkable-ai/provider-status.h"
 #include <QDebug>
 #endif
 #ifdef INK_MOVE_LIVE_TEST
@@ -305,6 +306,12 @@ private:
             const auto reservedPath=workflow::base;
             client_->usageObserver=[reservedPath](const QJsonObject &response) {
                 moveSession::budgetSettle(workflow::sessionRoot,reservedPath,response);
+            };
+#endif
+#ifdef INK_MOVE_PER_REQUEST
+            const auto fingerprint=remarkableAi::keyId(key_);
+            client_->providerObserver=[fingerprint](int status,const QString &code) {
+                remarkableAi::observe(workflow::sessionRoot,fingerprint,status,code);
             };
 #endif
             client_->start(workflow::question,key_,[this]{return liveValid();},

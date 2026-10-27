@@ -42,7 +42,8 @@ int main(int argc,char **argv) {
     for(const auto scenario:{"success","immediate","invalid-before","invalid-after","timeout","http","unauthorized","rate-limit","server-error","dns","tls","closed","oversize","refusal","incomplete","schema","needs-web","clarification","unsupported","cancel","destroy"}) {
         LiveMockManager manager;bool valid=true,called=false;QString text,error;
         auto *client=new Client(&app);
-        int usageCalls=0;
+        int usageCalls=0,providerCalls=0,observedHttp=-1;QString observedCode;
+        client->providerObserver=[&](int http,const QString &code){++providerCalls;observedHttp=http;observedCode=code;};
         client->usageObserver=[&](const QJsonObject &){++usageCalls;};
         if(QString(scenario)=="immediate")manager.delay=-2;
         if(QString(scenario)=="timeout" || QString(scenario)=="cancel" || QString(scenario)=="destroy")manager.delay=-1;
@@ -70,6 +71,10 @@ int main(int argc,char **argv) {
             assert(QTest::qWaitFor([&]{return called;},1000));
             const bool usageExpected=QString(scenario)=="success" || QString(scenario)=="immediate" || QString(scenario)=="refusal" || QString(scenario)=="incomplete" || QString(scenario)=="schema" || QString(scenario)=="needs-web" || QString(scenario)=="clarification" || QString(scenario)=="unsupported";
             assert(usageCalls==(usageExpected?1:0));
+            const bool providerExpected=usageExpected || QString(scenario)=="http" || QString(scenario)=="unauthorized" || QString(scenario)=="rate-limit" || QString(scenario)=="server-error" || QString(scenario)=="dns" || QString(scenario)=="tls" || QString(scenario)=="closed";
+            assert(providerCalls==(providerExpected?1:0));
+            if(providerExpected)assert(observedHttp==manager.code);
+            if(QString(scenario)=="rate-limit")assert(observedCode=="insufficient_quota");
             const bool success=QString(scenario)=="success" || QString(scenario)=="immediate";
             assert(success ? (!text.isEmpty() && error.isEmpty()) : (text.isEmpty() && !error.isEmpty()));
             if(QString(scenario)=="needs-web")assert(error=="Needs web access; search is off.");

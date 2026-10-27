@@ -1,0 +1,26 @@
+# Local experimental binary package. prepare.py supplies exact SHA-512 checksums.
+maintainer="OpenClaw local development <openclaw@example.invalid>"
+pkgname=remarkable-ai-move
+pkgver=0.1.0_beta1
+pkgrel=0
+upstream_author="howardpchen"
+category="productivity"
+pkgdesc="Experimental handwritten-question AI for the tested reMarkable Move firmware"
+url="https://github.com/howardpchen/remarkable-chatgpt"
+arch="aarch64"
+license="GPL-3.0-or-later"
+depends="rmppm remarkable-os=3.28.0.172 xovi>=0.3.3 xovi-message-broker>=19 xovi-message-broker<20 qt-resource-rebuilder>=19 qt-resource-rebuilder<20 rm-shot=1.2.0-r0 framebuffer-spy>=19 framebuffer-spy<20"
+source="remarkable-ai.so remarkable-ai MoveLive.qmd LICENSE SETUP.md"
+options="!check !fhs !tracedeps"
+
+package() {
+    install -Dm755 "$srcdir/remarkable-ai.so" "$pkgdir/home/root/xovi/extensions.d/ink-diary-move-live.so"
+    install -Dm644 "$srcdir/MoveLive.qmd" "$pkgdir/home/root/xovi/exthome/qt-resource-rebuilder/ink-diary-ui-probe.qmd"
+    install -Dm755 "$srcdir/remarkable-ai" "$pkgdir/home/root/.vellum/bin/remarkable-ai"
+    install -Dm644 "$srcdir/SETUP.md" "$pkgdir/home/root/.vellum/share/remarkable-ai/SETUP.md"
+    install -Dm644 "$srcdir/LICENSE" "$pkgdir/home/root/.vellum/licenses/$pkgname/LICENSE"
+    echo "$url" > "$pkgdir/home/root/.vellum/licenses/$pkgname/SOURCES"
+}
+# No lifecycle scripts: no restart, no API requests, no funding or private-state writes.
+# prepare.py replaces this checksum marker in the generated local build directory.
+# @SHA512SUMS@

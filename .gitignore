@@ -28,3 +28,7 @@ captures/
 # Local release archives
 *.tar.gz
 *.zip
+
+# Python validation caches
+__pycache__/
+*.py[cod]

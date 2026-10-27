@@ -97,6 +97,7 @@ inline QString transportFailure(int status,QNetworkReply::NetworkError networkEr
 class Client final : public QObject {
 public:
     std::function<void(const QJsonObject &)> usageObserver;
+    std::function<void(int,const QString &)> providerObserver;
     using Done=std::function<void(QString,QString)>;
     explicit Client(QObject *parent):QObject(parent) {
         timeout_.setSingleShot(true);
@@ -152,6 +153,8 @@ private:
         if(!drain())return;
         if(!valid_ || !valid_()) {finish({},"Cancelled or page changed during API request");return;}
         const int httpStatus=reply_->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        if(providerObserver) providerObserver(httpStatus,
+            QJsonDocument::fromJson(bytes_).object().value("error").toObject().value("code").toString());
         if(httpStatus!=200 || reply_->error()!=QNetworkReply::NoError) {
             const auto failure=transportFailure(httpStatus,reply_->error(),bytes_);
 #ifdef INK_MOVE_PER_REQUEST

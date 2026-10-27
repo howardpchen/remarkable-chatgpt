@@ -7,6 +7,7 @@
 #include <iostream>
 #include <signal.h>
 #include <sys/resource.h>
+#include <sys/file.h>
 #include <termios.h>
 
 namespace {
@@ -60,15 +61,13 @@ void requirePrivateParent(const QString &path) {
 }
 }
 
-int main(int argc,char **argv) {
-    QCoreApplication app(argc,argv);
+int runConfigure(const QStringList &args) {
     rlimit noCore{0,0}; ::setrlimit(RLIMIT_CORE,&noCore);
     ::umask(077);
-    const auto args=app.arguments();
     if((args.size()!=2 && args.size()!=4) ||
-       (args[1]!="--configure" && args[1]!="--check") ||
+       (args[1]!="--configure" && args[1]!="--check" && args[1]!="--remove") ||
        (args.size()==4 && args[2]!="--config")) {
-        std::cerr << "Usage: configure-move-live --configure|--check [--config PATH]\n";
+        std::cerr << "Usage: configure-move-live --configure|--check|--remove [--config PATH]\n";
         return 2;
     }
     const auto path=QDir::cleanPath(args.size()==4 ? args[3] :
@@ -81,23 +80,37 @@ int main(int argc,char **argv) {
             std::cout << "Private configuration valid for GPT-6 Luna. No API request made.\n";
             return 0;
         }
+        // Serialize CLI writers for this directory without creating lock files.
+        struct DirectoryLock {
+            int fd=-1;
+            explicit DirectoryLock(const QString &path) {
+                fd=::open(QFile::encodeName(path).constData(),O_RDONLY|O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC);
+                if(fd<0 || ::flock(fd,LOCK_EX|LOCK_NB)!=0) {
+                    if(fd>=0)::close(fd);
+                    throw std::runtime_error("Configuration is busy or unavailable; nothing saved");
+                }
+            }
+            ~DirectoryLock(){if(fd>=0)::close(fd);}
+        } lock(QFileInfo(path).absolutePath());
         struct stat before{};
         bool exists=::lstat(QFile::encodeName(path).constData(),&before)==0;
         if(!exists && errno!=ENOENT) throw std::runtime_error("Cannot inspect configuration");
+        if(!exists && args[1]=="--remove") {std::cout<<"No local key configured; nothing changed.\n";return 0;}
         QJsonObject config=exists ? moveLive::readPrivateConfig(path) : QJsonObject{};
-        if(config.value("demo_mode").toBool(false))
+        if(args[1]!="--remove" && config.value("demo_mode").toBool(false))
             throw std::runtime_error("Demo configuration left unchanged; use a separately reviewed live configuration");
         struct sigaction handler{};
         handler.sa_handler=interrupt; ::sigemptyset(&handler.sa_mask);
         for(int sig: {SIGINT,SIGTERM,SIGHUP,SIGQUIT}) ::sigaction(sig,&handler,nullptr);
         QByteArray key;
-        { Terminal terminal; key=terminal.readKey(); }
-        if(interrupted || !QRegularExpression("^[A-Za-z0-9_-]{1,512}$")
-                .match(QString::fromLatin1(key)).hasMatch()) {
+        if(args[1]!="--remove") { Terminal terminal; key=terminal.readKey(); }
+        if(interrupted || (args[1]!="--remove" && !QRegularExpression("^[A-Za-z0-9_-]{1,512}$")
+                .match(QString::fromLatin1(key)).hasMatch())) {
             key.fill('\0'); throw std::runtime_error("Invalid or interrupted key entry; nothing saved");
         }
-        config.insert("api_key",QString::fromLatin1(key)); key.fill('\0');
-        config.insert("model",moveLive::model);
+        if(args[1]=="--remove") config.remove("api_key");
+        else { config.insert("api_key",QString::fromLatin1(key)); config.insert("model",moveLive::model); }
+        key.fill('\0');
         requirePrivateParent(path);
         struct stat now{};
         bool present=::lstat(QFile::encodeName(path).constData(),&now)==0;
@@ -117,7 +130,7 @@ int main(int argc,char **argv) {
         bool written=output.write(bytes)==bytes.size(); bytes.fill('\0');
         if(!written || interrupted || !output.commit())
             throw std::runtime_error("Cannot commit configuration; original preserved");
-        moveLive::loadKey(path);
+        if(args[1]!="--remove") moveLive::loadKey(path);
         std::cout << "Private configuration saved; other fields preserved. No API request or arming performed.\n";
         return 0;
     } catch(const std::exception &e) {
@@ -125,3 +138,10 @@ int main(int argc,char **argv) {
         return interrupted ? 130 : 1;
     }
 }
+
+#ifndef INK_CONFIGURE_LIBRARY
+int main(int argc,char **argv) {
+    QCoreApplication app(argc,argv);
+    return runConfigure(app.arguments());
+}
+#endif

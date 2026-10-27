@@ -12,6 +12,13 @@ repository contains source, tests, fonts, licenses and rM2 prebuilt binaries;
 it contains no API credentials. ChatGPT subscription access does not supply API
 billing for this application.
 
+## Project continuity and experimental Vellum package
+
+See [project context](docs/PROJECT.md), [current checkpoint](docs/PROJECT-STATUS.md)
+and [roadmap](docs/ROADMAP.md) for ongoing development. The experimental Move
+[Vellum package and key/budget CLI](packaging/vellum/README.md) are a local packaging
+milestone, not a catalog release or a claim of broader device support.
+
 ## Device support and port status
 
 Status as of **2026-10-27**:

@@ -107,6 +107,7 @@ int main(int argc,char **argv) {
     panel->setProperty("localMessage","Live text inserted (single capture); verify placement and Undo/Redo");
     QCoreApplication::processEvents();assert(statusText->property("text").toString()=="Done · $5.00");
     snapshot("completed");
+    panel->setProperty("demoArmed",false); // Restore the synthetic idle broker state after previews.
     panel->setProperty("dollarBudget",false);
     root->setProperty("toolbarVisibleSetting",true);
 #endif

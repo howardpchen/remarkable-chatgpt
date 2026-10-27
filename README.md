@@ -1,45 +1,116 @@
-# Ink Diary 4.1 — reMarkable 2
+# Ink Diary — reMarkable notebook assistant
 
-**Installation and configuration: [INSTALL.md](INSTALL.md).**
+Ink Diary adds an AI assistant inside the tablet's native notebook app: capture
+the visible handwritten page, request an answer from OpenAI, render it locally,
+and insert it beneath the writing as an image. The intended workflow runs on the
+tablet without a companion server. Inserted answers are image objects, not
+editable pen strokes.
 
-This repository contains version 4.1 source, prebuilt ARM binaries, tests, assets, licenses and installation scripts. It contains no API credentials. Configure your own key privately on the tablet.
+**Current status: an rM2 prototype and an experimental Paper Pro Move port—not a
+production Paper Pro/Move release.** The rM2 bundle remains version 4.1. This
+repository contains source, tests, fonts, licenses and rM2 prebuilt binaries;
+it contains no API credentials. ChatGPT subscription access does not supply API
+billing for this application.
 
-A ChatGPT button inside the standard notebook app. Tap it to send the visible notebook area to OpenAI over the tablet's Wi-Fi, render the answer in Caveat handwriting, and insert it beneath your writing as a single handwriting image. No companion computer is needed after setup.
+## Device support and port status
 
-Target: **reMarkable 2, OS 3.27.3.0**. This is a development prototype, not a published Vellum catalog package. Hardware validation is in progress; see VALIDATION.md for the actual tested state.
+Status as of **2026-10-26**:
 
-## Paper Pro / Move port status (2026-10-26)
-
-The instructions below describe the **rM2 prototype**, not a Paper Pro or Move
-installation. Experimental port work has the following status:
-
-| Target | Verified scope | Release status |
+| Target | Tested scope | Installation/support status |
 | --- | --- | --- |
-| reMarkable 2 | Existing 3.27.3.0 prototype; see validation history | Existing prototype baseline |
-| Paper Pro Move (`chiappa`) | Exact 3.28.0.172 SDK build, real capture/live-change check, bounded Blank-template offline capture/render/insertion with Undo/Redo/reopen persistence | Production UI/runtime, real recognition/API and broader validation pending; production support disabled |
-| Paper Pro (`ferrari`) | Build-target preparation only; independent hardware validation pending | Production support disabled |
+| reMarkable 2 | Existing OS 3.27.3.0 prototype; see [validation history](VALIDATION.md) | Version 4.1 manual prototype bundle; [installation guide](INSTALL.md) applies only to this exact target |
+| Paper Pro Move (`chiappa`) | Exact OS 3.28.0.172 / Qt 6.10.3 SDK build; real screenshots; bounded offline capture/render/insertion with owner-confirmed placement, Undo/Redo and reopen persistence; deployed widget behavior accepted by owner | Separate experimental extension/widget deployed **unarmed**; real handwriting-to-API answer untested; production installer/support disabled |
+| Full-size Paper Pro (`ferrari`) | Build-target preparation; independent device validation pending | Production installer/support disabled; Move results do not certify this device |
 
-Move Qt window capture returned `qt-capture-unavailable`. Supported `rm-shot` and
-framebuffer-spy subsequently passed actual screenshot validation and a bounded fixed-response offline fixture. No live API request was made during the Move
-spike. Passing insertion does not establish the full screenshot-to-answer flow.
-See [current port status and next gates](docs/PORT-STATUS.md) and
-[developer port preparation](docs/PORTING.md). Do not use the rM2 installer on
-these targets or broaden compatibility gates based on the spike.
+**Do not run the rM2 installer on either Paper Pro model.** The port does not
+broaden the original firmware gates or provide a general-purpose Move installer.
+The bundled 4.1 binaries and `SHA256SUMS` belong to the original rM2 release
+snapshot. This evolving port branch is not a repackaged release: its changed
+source/docs do not match that frozen manifest, and its old binaries are not
+Move builds. Use an intact matching rM2 bundle for the legacy installation guide.
 
-### Unarmed live-text/widget experiment
+Full evidence and remaining gates are in [port status](docs/PORT-STATUS.md),
+[widget deployment](docs/MOVE-WIDGET-DEPLOYMENT.md) and
+[developer porting notes](docs/PORTING.md).
 
-A separate [bounded OpenAI text-test target](tools/move-live/README.md) now connects
-the tested Move capture/insertion controller to an asynchronous, single-request
-client. The extension and compact/dismissible widget are deployed on the exact
-Move release but remain **unarmed**; see [deployment verification](docs/MOVE-WIDGET-DEPLOYMENT.md).
-This is not production support or live-provider validation. No new tablet
-config/helper is implied; key provisioning and the first paid test remain separate.
+## Paper Pro Move: what works today
 
-## Demo mode
+There are two distinct experiments:
+
+- **Bounded offline workflow:** supported `rm-shot` capture → fixed local response
+  → local rendering → second-capture freshness check → one native image insertion.
+  Readable placement, Undo/Redo and reopen persistence passed on the disposable
+  Blank page. This did **not** recognize handwriting or call an AI model. Its
+  one-shot permissions are consumed and must not be reset or replayed.
+- **Separate live-text target:** a single-request OpenAI client and its widget
+  are implemented and deployed, but **Start remains disabled** until secure
+  configuration and a fresh reviewed run reference are provisioned. Host tests
+  cover the request/schema, cancellation, context changes, fit and teardown;
+  they are not evidence of a successful live answer on the tablet.
+
+Qt window capture was unavailable on this Move release; the supported `rm-shot` /
+framebuffer-spy path subsequently passed actual screenshot checks. These are
+separate results, not interchangeable capture methods.
+
+### Move widget behavior
+
+- Idle: a **72×72 AI launcher** at the lower right, with no ×.
+- Tap the launcher to open the controls; this does not start a request. **−**
+  returns to the launcher.
+- **×** appears only in the expanded, idle widget while native toolbars are
+  hidden. It dismisses the whole widget until the toolbar is shown again,
+  which restores the launcher.
+- While a request is busy, the **360×176** panel remains expanded with **Cancel**;
+  × and − are unavailable. Completion/cancel returns to the launcher. This busy
+  path is host-tested; no paid request was made during widget verification.
+- Screenshot capture temporarily suppresses our control and restores it afterward;
+  it does not change the native toolbar settings.
+
+The idle/expand/dismiss/restore UI was accepted by the owner on the Move.
+The expanded capture footprint, page/viewport/native-pose checks, exact pixel
+freshness, visible-space fit and durable one-shot guards remain in force.
+The current experiment is limited to the reviewed portrait, normal-zoom,
+**Blank-template** pose. It does not certify arbitrary transforms, dark/dotted
+templates or answers extending below the visible crop. An earlier hardware
+shutdown crash remains unexplained despite later clean stop/start verification.
+
+### Next milestone: one real text answer
+
+1. Confirm model availability and a bounded test budget. The current live client
+   pins `gpt-4.1-mini`; it does not silently substitute another model.
+2. Stage and verify a secure hidden-entry helper, then provision the owner-only
+   configuration. Intended configuration paths are not proof that the file or
+   helper already exists on a tablet.
+3. Review a fresh disposable Blank page, actual native UI/viewport and installed
+   artifact hashes; create a new reference without resetting old consumed runs.
+4. Under explicit live-test authority, run one handwritten question and verify
+   answer quality, placement, Undo/Redo, reopen persistence and device health.
+
+The Move live-text target currently excludes web search, image generation, plots
+and specialized diagram/template routing. Those features in the rM2 guide below
+are **not available through this Move experiment**. Production support remains
+disabled until broader hardware validation and packaging are complete.
+
+For build commands, limits and the configuration contract, see the
+[live-text developer guide](tools/move-live/README.md). The
+[offline-demo guide](tools/move-demo/README.md) and
+[local-preparation report](docs/MOVE-LIVE-PREPARATION.md) distinguish earlier
+hardware evidence from local-only checks. These are developer workflows, not an
+end-user Move installation bundle.
+
+## reMarkable 2 prototype guide
+
+**Everything below describes the original rM2 OS 3.27.3.0 prototype**, including
+its icon UI, configuration helper, features, output paths and installation/removal
+commands. It does not configure or enable the separate Move experiment.
+See [INSTALL.md](INSTALL.md) before using these instructions; model availability
+and API-account access must be checked independently of the bundled defaults.
+
+### Demo mode
 
 For offline testing, config.json may contain `{"demo_mode":true}`. Holding the icon shows **ChatGPT (demo)** and inserts a fixed handwriting sample below your writing without making any OpenAI request. Running `configure.sh` replaces demo mode with the real API configuration.
 
-## First use
+### First use
 
 1. Configure your own OpenAI API key privately in the reManager terminal:
    ```sh
@@ -52,7 +123,7 @@ For offline testing, config.json may contain `{"demo_mode":true}`. Holding the i
 5. Tap the **ChatGPT icon** in the bottom-right. Keep the page still and lift your pen until it finishes. While working, the icon becomes a stop square; tap it to cancel. Completion and error messages appear briefly above the button. Hold the icon to see its current status.
 6. The answer is laid out in the Caveat handwriting font and inserted as one transparent image. Letters are not editable pen strokes. The native notebook app controls image sizing and selection; placement and sizing need device validation.
 
-## Web search
+### Web search
 
 Write `Search` followed by a question to explicitly request a web lookup, for example `Search what is the screen resolution of reMarkable 2?`. Questions about current facts, news, weather, prices and schedules are also routed to search automatically by the model. Include a location when needed. Ordinary timeless questions and function plots do not normally need a lookup.
 
@@ -64,7 +135,7 @@ Search requests use your local timezone, currently `America/New_York`, with auto
 
 Search adds latency and API tool charges. Your existing key and model are retained; the model must support the hosted web-search tool. The question text and relevant notebook context are sent in the second request. Source files are root-only and persist with answer PNGs. Demo mode still makes no API requests.
 
-## Plot commands
+### Plot commands
 
 Write `plot` followed by one equation, then tap the ChatGPT icon. Examples:
 
@@ -78,7 +149,7 @@ The default x range is -5 to 5; y is automatically scaled from sampled values. A
 
 Answers and plots append below existing page content, extending beyond the visible screen when necessary. Scroll down to see the rest. Graphs use a white background for legibility over ruled templates and are inserted as image objects. Ordinary questions retain handwriting-image answers. Demo mode remains the original fixed text sample. The configured model must support Responses API Structured Outputs (the default gpt-4.1-mini does).
 
-## Generated images and diagrams
+### Generated images and diagrams
 
 Write a request and tap the same ChatGPT icon. Examples:
 
@@ -94,7 +165,7 @@ Diagrams are drawn locally with 3–4 px black lines and print labels. No third-
 
 Venn diagrams support two or three sets with numbered exclusive regions and a readable content legend underneath. Circle areas are not proportional to counts. Both blank templates and labeled comparisons work. Artwork prompts and diagram source are saved privately beside answer PNGs as `.png.source.txt`; ordinary text retains `.png.md`. The frozen version 3.0 release is unchanged.
 
-## Prototype limits
+### Prototype limits
 
 - Portrait orientation and short answers only. Light gray full-width horizontal rules and thin vertical margin lines (including those partly hidden by plots) are filtered out when locating handwriting. Dark or complex templates may still be treated as ink.
 - The working area is screen pixels x=150..1323, y=0..1751. Keep questions there. The side and bottom UI margins are cropped out of the uploaded screenshot; the top edge is included.
@@ -105,7 +176,7 @@ Venn diagrams support two or three sets with numbered exclusive regions and a re
 - Native image insertion and screen-to-page coordinate mapping must be supported by the installed firmware.
 - Firmware updates require revalidation. The native extension refuses to load outside 3.27.3.0; remove its QMD patch before changing firmware.
 
-## Installation from this archive
+### Installation from this archive
 
 Install Vellum/reManager and a working xovi/qt-resource-rebuilder setup first. Copy this directory to the tablet, then run as root:
 
@@ -121,7 +192,7 @@ The installer adds screenshot/message-broker dependencies through Vellum, instal
 setsid bash /home/root/xovi/start >/tmp/ink-diary-start.log 2>&1 </dev/null &
 ```
 
-## Removal
+### Removal
 
 ```sh
 sh /home/root/ink-diary-setup/uninstall.sh
@@ -129,11 +200,11 @@ sh /home/root/ink-diary-setup/uninstall.sh
 
 Restart the UI afterwards. Your notebooks and existing Vellum packages remain. The API key/configuration remains at `/home/root/.config/ink-diary/config.json`; remove that specific file if you want to delete the saved credential.
 
-## Privacy and network behavior
+### Privacy and network behavior
 
 Only tapping ChatGPT starts a request. The cropped visible notebook image goes to `https://api.openai.com/v1/responses` over HTTPS with certificate verification. `store:false` is set; it is not a promise of zero service-side retention. Screenshots use a private temporary directory and are deleted on normal completion/error. Answer PNGs remain in the root-only directory `/home/root/.local/share/ink-diary/answers` because the notebook app imports them asynchronously. An app crash may leave temporary files until reboot. For requested artwork, a standalone story/art prompt is also sent to `https://api.openai.com/v1/images/generations`; that endpoint does not accept the Responses API `store` flag. Diagram rendering remains local after the initial OpenAI transcription request. Notebook content and credentials are not printed to logs. The API key is saved locally with root-only permissions.
 
-## Build and test
+### Build and test
 
 Built using the official rM2 SDK for the 3.27 series:
 https://storage.googleapis.com/remarkable-codex-toolchain/3.27.0.97/rm2/remarkable-production-image-5.7.119-rm2-public-x86_64-toolchain.sh
@@ -158,7 +229,7 @@ Upstream provenance and licenses: THIRD_PARTY.md. API documentation: https://dev
 
 Append-placement regression checks can also be run with `node tests/append.cjs`.
 
-## Markdown answers
+### Markdown answers
 
 Answers now render GitHub-style Markdown using the tablet's Qt text engine: six heading levels, bold/italic/strikethrough, ordered and unordered nested lists, task checkboxes, tables with column alignment, inline and fenced/indented code, blockquotes, links, horizontal rules, and Markdown escapes. Paragraphs and headings use Caveat handwriting; tables and code use readable print/monospaced fonts. Code is displayed, not executed, and has no syntax highlighting. Links and checkboxes in the notebook are static ink images; links work in the saved sibling HTML file.
 
@@ -168,11 +239,11 @@ Markdown dialects differ: raw HTML, LaTeX, Mermaid, footnotes, and embedded remo
 
 A synthetic example is available in `markdown-preview.png`. The archived version 2.0 is unchanged.
 
-### Current dates and recent facts
+#### Current dates and recent facts
 
 Both the notebook-reading stage and web-search stage receive the tablet's current local date, time, and timezone. The reading stage is instructed to treat this as the present even when it is later than the model's training cutoff, and to disregard stale prior notebook answers. A fallback checks the transcribed latest question for English freshness phrases and current-officeholder questions and forces the search route if the model incorrectly labels it ordinary text. Other languages still rely on model routing. This does not guarantee source accuracy; search is instructed to admit when current facts cannot be verified. The tablet clock must remain correct. Prefixing a question with `Search` remains available for explicit web lookup.
 
-### Change only the model
+#### Change only the model
 
 In reManager's terminal, run:
 
@@ -188,7 +259,7 @@ Blank checklists are supported: request `create a 10 item checklist with checkbo
 
 Text answers also retain their original model-returned Markdown in a private sibling `.png.md` file. This helps distinguish generation problems from rendering problems. The diagnostic message `ink-diary$probe` with argument `checklist` tests ten synthetic blank rows inside the notebook process without inserting anything.
 
-## Structured templates
+### Structured templates
 
 Checklist and single-table creation requests now use dedicated response kinds in the existing API call. The model supplies a count and optional labels for checklists, or columns and rows for tables. The plugin generates blank rows itself, escapes cell/label text, validates counts and dimensions, and renders the result. Blank templates cannot collapse because of empty model-generated Markdown. Supported limits are 1–50 items/body rows and up to 8 table columns; image size limits still apply. Mixed explanatory answers and web-search answers continue to use Markdown. No additional classifier request is needed.
 
@@ -196,7 +267,7 @@ Examples: `Create a 10 item checklist without labels`; `Create a pros and cons t
 
 Checkbox outlines, table borders, horizontal dividers, quote bars and plot frames/axes use 3-pixel strokes at source-image resolution; plot gridlines use 2 pixels. Checkbox outlines are painted explicitly for consistency. These changes apply to new answers. Saved `.png.md` files contain model Markdown for ordinary answers and locally generated Markdown for structured templates.
 
-### Writable calendar/table cells
+#### Writable calendar/table cells
 
 Table templates now carry `cell_lines` (1–10). `1` keeps the compact layout; each additional handwriting line reserves 60 source-image pixels beneath the cell's text. Header rows stay compact. For example: `Create a calendar for November 2026 with each day cell 3 rows tall so I can write in it`. For monthly calendars the model identifies the month, year and requested height; the tablet computes the Gregorian dates and weekday positions using QDate. Sunday is the default first column; ask for Monday-start if preferred. Calendar cells default to three writing lines. HTML `<br>` tags are not used for spacing. This also works for other tables with requested writing space. Large layouts may extend down the notebook page or reach the existing image-height limit.
 

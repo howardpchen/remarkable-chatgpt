@@ -4,8 +4,13 @@
 
 Owner reported `answer-does-not-fit-visible-crop` on Small Grid while Blank worked.
 Read-only inspection of saved request captures reproduced a template-detector bug.
-No provider call, Start, retry, device change or budget reset was performed.
-A focused detector fix is prepared locally; it has **not been deployed**.
+Initial diagnosis and validation made no provider call or device change.
+The owner then authorized installation. The focused fix is now **installed and
+verified loaded** on the Move after one clean stop/start. The narrow QMD and
+loaded UI resource are unchanged; calibration, key, policy, usage and all 61
+other protected file hashes are unchanged. The allowance is unchanged and no
+Start/model request was sent for deployment. Real provider/answer insertion has
+not been re-tested automatically.
 Private captures, measurements, artifact hashes and exact verification logs are
 outside this checkout under workspace `reports/remarkable-grid-fit-20261027/`.
 
@@ -43,8 +48,12 @@ have 38 scenarios. The candidate device module is independently rebuilt from the
 this detector change (and its tests), not the newer CLI or lifecycle work.
 Candidate module SHA256:
 `e81754c6168d333591059173e8623b79f22e1ba7a8c8114c6ba965ab05307f28`.
-Only SO and matching device-profile file hash would need updating; the deployed
-narrow QMD, resource fingerprint, calibration, keys, policy and usage remain.
+The authorized installation updated only SO and matching device-profile file
+hash. The deployed narrow QMD, resource fingerprint, calibration, keys, policy
+and usage remain unchanged. Rollback SO/profile are retained in a unique private
+inactive stage; the exact path and runtime PID are in the private TaskFlow.
+The previous local Vellum APK predates this fix: rebuild/revalidate it before
+package migration or distribution rather than overwriting the corrected Move.
 Any live deployment requires scoped authorization and a rollback-safe monitored
 stop/start; inspect current state first and never retry an uncertain stop.
 

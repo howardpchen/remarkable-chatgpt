@@ -28,6 +28,10 @@ request-count limit applies; the fixed model, 800-output-token bound, explicit
 Start, one active request, capture/native/placement guards and no retries remain.
 The widget uses concise idle/completion text, a remaining-budget line and a single
 Start/Cancel button; actionable errors and unsupported-answer notices stay visible.
+The visible expanded card is 280×152, with unchanged text sizing and a 60-pixel
+Start/Cancel target; longer notices use the original 360×176 layout. The invisible
+capture-owner boundary remains exactly 360×176 at the tested position, so capture
+admission and suppression remain unchanged. The collapsed launcher stays 72×72.
 
 Provision a private owner-only `budget-policy.json` (0600) in the existing private
 run root, only once under deployment authority, with this schema:

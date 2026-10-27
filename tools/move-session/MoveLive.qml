@@ -1,9 +1,9 @@
 import QtQuick 2.15
 import net.asivery.XoviMessageBroker 2.0
 
-// Compact idle launcher; expanded capture uses the tested 360×176 footprint.
+// Keep the exact 360×176 capture-owner boundary; draw a tighter card inside it.
 // Text answer backend only. No on-load Start.
-Rectangle {
+Item {
     id: moveUiProbe
     objectName: "moveUiProbe"
     z: 10000
@@ -47,10 +47,6 @@ Rectangle {
         else controlsExpanded = true; // Keep completion/error visible until explicitly collapsed.
     }
     visible: !dismissedUntilToolbar && !diaryCaptureSuppressed && parent !== null && parent.documentLoaded === true && parent.width >= 320 && parent.height >= 352
-    color: "white"
-    border.color: "black"
-    border.width: 1
-    radius: 12
     property bool demoBusy: false
     property bool demoArmed: false
     property int requestsRemaining: 0
@@ -97,122 +93,137 @@ Rectangle {
     }
 
     Rectangle {
-        id: launcher
-        objectName: "moveUiProbeLauncher"
-        anchors.fill: parent
+        id: panelCard
+        objectName: "moveUiProbeCard"
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        // Actionable notices retain the original roomy layout and text size.
+        readonly property bool detailedStatus: moveUiProbe.statusLabel().length > 20
+        width: Math.min(parent.width, moveUiProbe.panelExpanded && !detailedStatus ? 280 : parent.width)
+        height: moveUiProbe.panelExpanded && !detailedStatus ? 152 : parent.height
         color: "white"
         border.color: "black"
-        border.width: 2
-        radius: 8
-        visible: !moveUiProbe.panelExpanded
-        Text {
-            anchors.centerIn: parent
-            text: "AI"
-            font.pixelSize: 24
-            color: "black"
-        }
-        MouseArea {
-            anchors.fill: parent
-            onClicked: moveUiProbe.controlsExpanded = true
-        }
-    }
+        border.width: 1
+        radius: 12
 
-    Rectangle {
-        id: dismissButton
-        objectName: "moveUiProbeDismissButton"
-        anchors.top: parent.top
-        anchors.right: parent.right
-        anchors.margins: 8
-        width: 40
-        height: 40
-        color: "white"
-        // Keep Cancel reachable while a request is running.
-        visible: moveUiProbe.panelExpanded && moveUiProbe.toolbarsHidden && !moveUiProbe.demoBusy
-        enabled: visible
-        Text {
-            anchors.centerIn: parent
-            text: "×"
-            font.pixelSize: 30
-            color: "black"
-        }
-        MouseArea {
+        Rectangle {
+            id: launcher
+            objectName: "moveUiProbeLauncher"
             anchors.fill: parent
-            onClicked: {
-                if (moveUiProbe.toolbarsHidden && !moveUiProbe.demoBusy) {
-                    moveUiProbe.controlsExpanded = false;
-                    moveUiProbe.dismissedUntilToolbar = true;
+            color: "white"
+            border.color: "black"
+            border.width: 2
+            radius: 8
+            visible: !moveUiProbe.panelExpanded
+            Text {
+                anchors.centerIn: parent
+                text: "AI"
+                font.pixelSize: 24
+                color: "black"
+            }
+            MouseArea {
+                anchors.fill: parent
+                onClicked: moveUiProbe.controlsExpanded = true
+            }
+        }
+
+        Rectangle {
+            id: dismissButton
+            objectName: "moveUiProbeDismissButton"
+            anchors.top: parent.top
+            anchors.right: parent.right
+            anchors.margins: 8
+            width: 40
+            height: 40
+            color: "white"
+            // Keep Cancel reachable while a request is running.
+            visible: moveUiProbe.panelExpanded && moveUiProbe.toolbarsHidden && !moveUiProbe.demoBusy
+            enabled: visible
+            Text {
+                anchors.centerIn: parent
+                text: "×"
+                font.pixelSize: 30
+                color: "black"
+            }
+            MouseArea {
+                anchors.fill: parent
+                onClicked: {
+                    if (moveUiProbe.toolbarsHidden && !moveUiProbe.demoBusy) {
+                        moveUiProbe.controlsExpanded = false;
+                        moveUiProbe.dismissedUntilToolbar = true;
+                    }
                 }
             }
         }
-    }
 
-    Rectangle {
-        id: collapseButton
-        objectName: "moveUiProbeCollapseButton"
-        anchors.top: parent.top
-        anchors.right: dismissButton.visible ? dismissButton.left : parent.right
-        anchors.margins: 8
-        width: 40
-        height: 40
-        color: "white"
-        visible: moveUiProbe.panelExpanded && !moveUiProbe.demoBusy
-        Text {
-            anchors.centerIn: parent
-            text: "−"
-            font.pixelSize: 30
-            color: "black"
-        }
-        MouseArea {
-            anchors.fill: parent
-            onClicked: {
-                if (!moveUiProbe.demoBusy) moveUiProbe.controlsExpanded = false;
+        Rectangle {
+            id: collapseButton
+            objectName: "moveUiProbeCollapseButton"
+            anchors.top: parent.top
+            anchors.right: dismissButton.visible ? dismissButton.left : parent.right
+            anchors.margins: 8
+            width: 40
+            height: 40
+            color: "white"
+            visible: moveUiProbe.panelExpanded && !moveUiProbe.demoBusy
+            Text {
+                anchors.centerIn: parent
+                text: "−"
+                font.pixelSize: 30
+                color: "black"
+            }
+            MouseArea {
+                anchors.fill: parent
+                onClicked: {
+                    if (!moveUiProbe.demoBusy) moveUiProbe.controlsExpanded = false;
+                }
             }
         }
-    }
-
-    Text {
-        id: probeStatus
-        visible: moveUiProbe.panelExpanded
-        objectName: "moveUiProbeStatus"
-        anchors.left: parent.left
-        anchors.right: collapseButton.visible ? collapseButton.left : parent.right
-        anchors.top: parent.top
-        anchors.margins: 12
-        height: 60
-        font.pixelSize: 22
-        wrapMode: Text.WordWrap
-        text: moveUiProbe.statusLabel()
-        color: "black"
-    }
-
-    Rectangle {
-        id: probeButton
-        visible: moveUiProbe.panelExpanded
-        objectName: "moveUiProbeButton"
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
-        anchors.margins: 12
-        height: 68
-        color: (moveUiProbe.demoBusy || moveUiProbe.demoArmed) ? "black" : "white"
-        border.color: "black"
-        border.width: 1
-        radius: 10
 
         Text {
-            anchors.centerIn: parent
-            font.pixelSize: 24
-            color: (moveUiProbe.demoBusy || moveUiProbe.demoArmed) ? "white" : "black"
-            text: moveUiProbe.demoBusy ? "Cancel" : (moveUiProbe.demoArmed ? "Start" : (moveUiProbe.dollarBudget && moveUiProbe.budgetReady && moveUiProbe.budgetAvailable < moveUiProbe.budgetReservation ? "Budget reached" : "Setup needed"))
+            id: probeStatus
+            visible: moveUiProbe.panelExpanded
+            objectName: "moveUiProbeStatus"
+            anchors.left: parent.left
+            anchors.right: collapseButton.visible ? collapseButton.left : parent.right
+            anchors.top: parent.top
+            anchors.margins: 12
+            height: 60
+            font.pixelSize: 22
+            wrapMode: Text.WordWrap
+            text: moveUiProbe.statusLabel()
+            color: "black"
         }
 
-        MouseArea {
-            anchors.fill: parent
-            enabled: moveUiProbe.demoBusy || moveUiProbe.demoArmed
-            onClicked: {
-                moveUiProbe.clicks += 1;
-                demoBroker.sendSimpleSignal("ink-diary-move-live$control", moveUiProbe.demoBusy ? "cancel" : "start");
-                moveUiProbe.refreshStatus();
+        Rectangle {
+            id: probeButton
+            visible: moveUiProbe.panelExpanded
+            objectName: "moveUiProbeButton"
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            anchors.margins: 12
+            height: panelCard.detailedStatus ? 68 : 60
+            color: (moveUiProbe.demoBusy || moveUiProbe.demoArmed) ? "black" : "white"
+            border.color: "black"
+            border.width: 1
+            radius: 10
+
+            Text {
+                anchors.centerIn: parent
+                font.pixelSize: 24
+                color: (moveUiProbe.demoBusy || moveUiProbe.demoArmed) ? "white" : "black"
+                text: moveUiProbe.demoBusy ? "Cancel" : (moveUiProbe.demoArmed ? "Start" : (moveUiProbe.dollarBudget && moveUiProbe.budgetReady && moveUiProbe.budgetAvailable < moveUiProbe.budgetReservation ? "Budget reached" : "Setup needed"))
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                enabled: moveUiProbe.demoBusy || moveUiProbe.demoArmed
+                onClicked: {
+                    moveUiProbe.clicks += 1;
+                    demoBroker.sendSimpleSignal("ink-diary-move-live$control", moveUiProbe.demoBusy ? "cancel" : "start");
+                    moveUiProbe.refreshStatus();
+                }
             }
         }
     }

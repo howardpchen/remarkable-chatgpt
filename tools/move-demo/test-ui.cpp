@@ -70,6 +70,25 @@ int main(int argc,char **argv) {
     assert(!dismiss->isVisible() && collapse->isVisible());
 #ifdef INK_MOVE_PER_REQUEST
     auto *statusText=panel->findChild<QQuickItem *>("moveUiProbeStatus");assert(statusText);
+    auto *card=panel->findChild<QQuickItem *>("moveUiProbeCard");assert(card);
+    auto snapshot=[&](const QString &name) {
+        const auto destination=qEnvironmentVariable("INK_MOVE_UI_PREVIEW_DIR");
+        if(destination.isEmpty()) return;
+        assert(QDir().mkpath(destination));QTest::qWait(30);
+        assert(window.grabWindow().save(destination+"/"+name+".png"));
+    };
+    panel->setProperty("dollarBudget",true);
+    panel->setProperty("budgetAvailable",5.0);
+    panel->setProperty("demoArmed",true);
+    panel->setProperty("localMessage","Ready");QCoreApplication::processEvents();
+    assert(card->mapRectToScene(card->boundingRect())==QRectF(658,1528,280,152));
+    assert(statusText->property("contentWidth").toReal()<=statusText->width());
+    snapshot("expanded");
+    root->setProperty("toolbarVisibleSetting",false);QCoreApplication::processEvents();
+    assert(statusText->property("contentWidth").toReal()<=statusText->width());
+    assert(collapse->mapRectToScene(collapse->boundingRect()).right()<=dismiss->mapRectToScene(dismiss->boundingRect()).left());
+    snapshot("expanded-toolbar-hidden");
+    root->setProperty("toolbarVisibleSetting",true);
     // Exercise the actual narrow status region with and without dismiss control.
     for(bool hidden:{false,true}) {
         root->setProperty("toolbarVisibleSetting",!hidden);
@@ -77,6 +96,7 @@ int main(int argc,char **argv) {
             panel->setProperty("localMessage",notice);QCoreApplication::processEvents();
             assert(statusText->property("text").toString()==notice);
             assert(statusText->property("contentHeight").toReal()<=statusText->height());
+            assert(card->width()==360 && card->height()==176);
         }
     }
     panel->setProperty("dollarBudget",true);
@@ -86,6 +106,7 @@ int main(int argc,char **argv) {
     assert(statusText->property("text").toString()=="AI · $5.00");
     panel->setProperty("localMessage","Live text inserted (single capture); verify placement and Undo/Redo");
     QCoreApplication::processEvents();assert(statusText->property("text").toString()=="Done · $5.00");
+    snapshot("completed");
     panel->setProperty("dollarBudget",false);
     root->setProperty("toolbarVisibleSetting",true);
 #endif

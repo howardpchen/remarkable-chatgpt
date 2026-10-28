@@ -2,6 +2,8 @@
 set -euo pipefail
 cd -- "$(dirname -- "$0")"
 mkdir -p build-host
+bash tools/diagnostic/test-lifecycle.sh
+bash tools/broker-lifecycle/test.sh
 c++ -std=c++17 -fPIC tests/cancellation.cpp -o build-host/cancellation $(pkg-config --cflags --libs Qt6Network Qt6Core)
 ./build-host/cancellation
 c++ -std=c++17 -fPIC tools/diagnostic/test-policy.cpp -o build-host/diagnostic-policy $(pkg-config --cflags --libs Qt6Core)

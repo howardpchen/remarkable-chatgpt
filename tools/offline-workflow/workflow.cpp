@@ -94,7 +94,7 @@ int placementInkRow(const QImage &image) {
     const auto snap=diagnostic::viewportSnapshot(qmlEngine(p.view),p.view);
     const auto points=snap.value("points").toArray();
     if(points.size()!=3)return image.height()-1;
-    const double scale=(points[1].toArray()[0].toDouble()-points[0].toArray()[0].toDouble())/100;
+    const double scale=diaryMoveAxes(points).scale;
     try {return moveTemplateInk::lastRow(image,name,scale);}
     catch(const std::exception &) {return image.height()-1;} // no placement space on uncertainty
 #else
@@ -108,7 +108,7 @@ bool validDimensions(qreal width,qreal height) {
 QString geometry(const Page &p) {
     if(!p.view || !validDimensions(p.view->width(),p.view->height()))return {};
     auto *e=qmlEngine(p.view);if(!e)return {};
-    auto f=e->evaluate(QStringLiteral(R"JS((function(v){try {
+    auto f=e->evaluate(QStringLiteral(R"JS((function(v,quarterTurns){try {
         if(!v || !isFinite(v.width) || !isFinite(v.height) || v.width<=0 || v.height<=0)return '';
         let pts=[];
         for(const xy of [[0,0],[100,0],[0,100],[477,700]]) {
@@ -117,16 +117,35 @@ QString geometry(const Page &p) {
             pts.push([q.x,q.y]);
         }
         const dx=pts[1][0]-pts[0][0],dy=pts[2][1]-pts[0][1];
-        if(dx<=0 || dy<=0 || Math.abs(pts[1][1]-pts[0][1])>0.001 ||
-           Math.abs(pts[2][0]-pts[0][0])>0.001)return '';
-        if(Math.abs(pts[3][0]-(pts[0][0]+4.77*dx))>0.001 ||
-           Math.abs(pts[3][1]-(pts[0][1]+7*dy))>0.001)return '';
+        if(!quarterTurns && (dx<=0 || dy<=0 || Math.abs(pts[1][1]-pts[0][1])>0.001 ||
+           Math.abs(pts[2][0]-pts[0][0])>0.001))return '';
+        if(Math.abs(pts[3][0]-(pts[0][0]+4.77*dx+7*(pts[2][0]-pts[0][0])))>0.001 ||
+           Math.abs(pts[3][1]-(pts[0][1]+7*dy+4.77*(pts[1][1]-pts[0][1])))>0.001)return '';
         return JSON.stringify({width:v.width,height:v.height,points:pts});
     }catch(e){return '';}}))JS"));
     if(!f.isCallable())return {};
     auto own=QQmlEngine::objectOwnership(p.view);auto obj=e->newQObject(p.view);
     QQmlEngine::setObjectOwnership(p.view,own);
-    auto r=f.call({obj});return r.isError()?QString():r.toString();
+    auto r=f.call({obj,
+#ifdef INK_MOVE_PER_REQUEST
+        true
+#else
+        false
+#endif
+    });
+    if(r.isError())return {};
+    try {diaryMoveAxes(QJsonDocument::fromJson(r.toString().toUtf8()).object().value("points").toArray());}
+    catch(...) {return {};}
+    #ifdef INK_MOVE_PER_REQUEST
+    auto frozen=QJsonDocument::fromJson(r.toString().toUtf8()).object();
+    const auto snapshot=diagnostic::viewportSnapshot(e,p.view);
+    if(snapshot.isEmpty())return {};
+    for(const auto *field:{"windowWidth","windowHeight","devicePixelRatio","windowCorners"})frozen.insert(field,snapshot.value(field));
+    try {diaryMoveFrame(frozen);}catch(...){return {};}
+    return QString::fromUtf8(QJsonDocument(frozen).toJson(QJsonDocument::Compact));
+#else
+    return r.toString();
+#endif
 }
 enum class Phase { Idle, Prepared, Capturing, AwaitingAnswer, Rendered, Verifying, Consumed, Cancelled };
 #ifdef INK_MOVE_LIVE_TEST
@@ -139,6 +158,7 @@ QPointer<QQuickWindow> originWindow;
 QPointer<QObject> originDocument,originController;
 QPointer<QQuickItem> originView;
 QString originId,originGeometry;
+QSize originSize;
 QRect area;
 QImage question,answer;
 QPointF target;
@@ -154,7 +174,7 @@ bool samePixels(const QImage &a,const QImage &b) {
 bool fresh(const Page &p) {
     return p.window && p.window==originWindow && p.document==originDocument &&
         p.controller==originController && p.view==originView && p.id==originId &&
-        p.window->size()==QSize(954,1696) && p.window->devicePixelRatio()==1 &&
+        p.window->size()==originSize && p.window->devicePixelRatio()==1 &&
         geometry(p)==originGeometry;
 }
 QJsonObject startCapture(const QString &name,Phase next) {
@@ -189,7 +209,7 @@ QJsonObject run(const QJsonObject &request) {
     const auto p=current();
     if(op=="prepare") {
         if(phase!=Phase::Idle)return fail("already-prepared");
-        if(!p.window || p.window->size()!=QSize(954,1696) || p.window->devicePixelRatio()!=1)return fail("unsupported-window");
+        if(!p.window || !diaryMoveWindowSupported(p.window->size()) || p.window->devicePixelRatio()!=1)return fail("unsupported-window");
         const auto g=geometry(p);if(g.isEmpty())return fail("unsupported-geometry");
         const auto crop=request.value("measuredCrop").toArray();
         if(crop.size()!=4)return fail("explicit-measured-crop-required");
@@ -200,16 +220,16 @@ QJsonObject run(const QJsonObject &request) {
 #ifdef INK_MOVE_LIVE_TEST
         // Exact live crop only; the controller verifies all native UI
         // at admission and both suppressed capture boundaries.
-        if(area!=diaryMoveBoundedCaptureArea())return fail("invalid-live-crop");
+        if(area!=diaryMoveBoundedCaptureArea(p.window->size()))return fail("invalid-live-crop");
 #else
         if(area.x()<112 || area.y()<112)return fail("crop-includes-observed-ui");
 #endif
-        try {diaryCaptureLayout({954,1696},{954,1696},1,DiaryCaptureProfile::ExperimentalMove,area);}
+        try {diaryCaptureLayout(p.window->size(),p.window->size(),1,DiaryCaptureProfile::ExperimentalMove,area);}
         catch(const std::exception &){return fail("invalid-crop");}
         if(!QDir().mkpath(base) || !QFile::setPermissions(base,QFileDevice::ReadOwner|QFileDevice::WriteOwner|QFileDevice::ExeOwner))return fail("private-directory-failed");
         // Existing run artifacts are never overwritten or treated as fresh.
         for(const auto &name:{"/question.png","/check.png","/answer.png"})if(QFile::exists(base+name))return fail("existing-run-artifacts");
-        originWindow=p.window;originDocument=p.document;originController=p.controller;
+        originSize=p.window->size();originWindow=p.window;originDocument=p.document;originController=p.controller;
         originView=p.view;originId=p.id;originGeometry=g;phase=Phase::Prepared;
         return {{"ok",true},{"prepared",true},{"fixtureOnly",fixtureOnly}};
     }
@@ -250,9 +270,19 @@ QJsonObject run(const QJsonObject &request) {
 #endif
         );
         if(screen.isNull())return fail("capture-pending");
-        if(screen.size()!=QSize(954,1696)){phase=Phase::Cancelled;return fail("capture-geometry-changed");}
+        if(screen.size()!=originSize){phase=Phase::Cancelled;return fail("capture-geometry-changed");}
         if(!fresh(current())){phase=Phase::Cancelled;return fail("context-changed-during-capture");}
+        #ifdef INK_MOVE_PER_REQUEST
+        const auto frozenViewport=QJsonDocument::fromJson(originGeometry.toUtf8()).object();
+        QImage reading;
+        try {reading=diaryMoveReadingImage(screen,frozenViewport);}
+        catch(...) {phase=Phase::Cancelled;return fail("capture-view-map-changed");}
+        const QRect contentArea(QPoint(0,0),reading.size());
+        const auto cropped=reading.copy(contentArea);
+#else
+        const QRect contentArea=area;
         const auto cropped=screen.copy(area);
+#endif
         #ifdef INK_MOVE_LIVE_TEST
         if(readQuestion) {
             if(placementInkRow(cropped)<0){phase=Phase::Cancelled;return fail("no-visible-ink");}
@@ -276,34 +306,39 @@ QJsonObject run(const QJsonObject &request) {
 #endif
 QFontDatabase::applicationFontFamilies(font).first(),
 #ifdef INK_MOVE_LIVE_TEST
-834 // Keep answer placement clear of the restored left toolbar.
+contentArea.width()-120 // Keep answer placement clear of the restored left toolbar.
 #else
 area.width()
 #endif
 ).image;}
             catch(const std::exception &){phase=Phase::Cancelled;return fail("render-failed");}
             const auto pts=QJsonDocument::fromJson(originGeometry.toUtf8()).object().value("points").toArray();
-            const auto zero=pts[0].toArray(),dx=pts[1].toArray(),dy=pts[2].toArray();
-            const qreal sx=(dx[0].toDouble()-zero[0].toDouble())/100;
-            const qreal sy=(dy[1].toDouble()-zero[1].toDouble())/100;
+            const auto axes=
+#ifdef INK_MOVE_PER_REQUEST
+                diaryMoveReadingAxes(frozenViewport);
+#else
+                diaryMoveAxes(pts);
+#endif
+            const qreal sx=axes.scale, sy=axes.scale;
             // Native image pixels occupy scene units, not window pixels.
             const qreal nw=std::floor(answer.width()*sx),nh=std::floor(answer.height()*sy);
             if(!std::isfinite(nw) || !std::isfinite(nh) || nw<1 || nh<1 ||
                nw>4096 || nh>4096 || nw*nh>16000000){phase=Phase::Cancelled;return fail("native-image-budget-exceeded");}
             answer=answer.scaled(int(nw),int(nh),Qt::IgnoreAspectRatio,Qt::SmoothTransformation);
             const qreal screenWidth=answer.width()/sx,screenHeight=answer.height()/sy;
-            const int top=area.y()+last+45;
-            if(answer.isNull() || top+screenHeight>area.y()+area.height()){phase=Phase::Cancelled;return fail("answer-does-not-fit-visible-crop");}
+            const int top=contentArea.y()+last+45;
+            if(answer.isNull() || top+screenHeight>contentArea.y()+contentArea.height()){phase=Phase::Cancelled;return fail("answer-does-not-fit-visible-crop");}
+            if(axes.degrees)answer=answer.transformed(QTransform().rotate(axes.degrees));
             if(!answer.save(base+"/answer.png") || !QFile::setPermissions(base+"/answer.png",QFileDevice::ReadOwner|QFileDevice::WriteOwner)){phase=Phase::Cancelled;return fail("answer-save-failed");}
             question=cropped;
             const qreal x=
 #ifdef INK_MOVE_LIVE_TEST
-                120+834/2.0,
+                120+(contentArea.width()-120)/2.0,
 #else
                 area.x()+area.width()/2.0,
 #endif
                 y=top+screenHeight/2.0;
-            target=QPointF(zero[0].toDouble()+x*sx,zero[1].toDouble()+y*sy);
+            target=axes.map(QPointF(x,y));
             if(!std::isfinite(target.x()) || !std::isfinite(target.y())){phase=Phase::Cancelled;return fail("invalid-insertion-target");}
             phase=Phase::Rendered;
             return {{"ok",true},{"fixtureOnly",fixtureOnly},{"answerWidth",answer.width()},{"answerHeight",answer.height()},
@@ -342,9 +377,9 @@ extern "C" char *ink_diary_workflow(const char *value) {
         const QByteArray raw(value?value:"");
         if(raw.size()>1024)return strdup("{\"ok\":false,\"error\":\"request-too-large\"}");
         const auto request=QJsonDocument::fromJson(raw);
-        auto job=[&]{result=request.isObject()?workflow::run(request.object()):workflow::fail("invalid-request");};
-        if(QThread::currentThread()==app->thread())job();
-        else if(!QMetaObject::invokeMethod(app,job,Qt::BlockingQueuedConnection))result=workflow::fail("gui-unavailable");
+        result=diaryDispatch::run([request]{
+            return request.isObject()?workflow::run(request.object()):workflow::fail("invalid-request");
+        });
     }
     return strdup(QJsonDocument(result).toJson(QJsonDocument::Compact).constData());
 }

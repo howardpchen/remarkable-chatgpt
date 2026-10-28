@@ -40,7 +40,7 @@ public:
 #endif
         if (!diagnostic::allowed()) return "unsupported-runtime";
         const auto p=workflow::current();
-        if (p.window!=window || crop!=diaryMoveBoundedCaptureArea()) return "native-window-or-crop-changed";
+        if (p.window!=window || crop!=diaryMoveBoundedCaptureArea(window->size())) return "native-window-or-crop-changed";
         auto *doc=qobject_cast<QQuickItem *>(p.document);
         if (diaryMetadata::captureTemplateName(qmlEngine(doc),doc).isEmpty()) return "supported-template-required";
         const auto pose=diagnostic::nativePose(doc);
@@ -56,7 +56,7 @@ public:
 #endif
         ).toObject()) return "native-ui-pose-changed-or-unavailable";
 #ifdef INK_MOVE_LIVE_TEST
-        if (suppressed && (!diaryMoveCaptureUiClear(pose) ||
+        if (suppressed && (!diaryMoveCaptureUiClear(pose,window->size()) ||
             pose.value("states").toObject().value("toolbar").toObject().value("visible")!=QJsonValue(false) ||
             pose.value("states").toObject().value("toolbar").toObject().value("shown")!=QJsonValue(false)))
             return "capture-ui-visible-or-unavailable";
@@ -87,6 +87,53 @@ public:
         return {};
     }
 };
+#ifdef INK_MOVE_PER_REQUEST
+// Explicit setup telemetry only: no capture, config/key read, reservation,
+// profile write, networking or insertion. Do not turn live telemetry into an
+// automatic calibration approval. Native overrides are scoped and restored.
+inline QJsonObject calibrationPreview(bool busy) {
+    if(busy)return {{"ok",false},{"error","request-active"}};
+    const auto page=workflow::current();
+    auto *document=qobject_cast<QQuickItem *>(page.document);
+    const auto snapshot=viewport(page);
+    try {diaryMoveFrame(snapshot);diaryMoveReadingAxes(snapshot);}catch(...) {
+        return {{"ok",false},{"error","unsupported-calibration-view"}};
+    }
+    QQuickItem *control=nullptr;
+    QList<QQuickItem *> pending{page.window->contentItem()};
+    QSet<QQuickItem *> seen;
+    while(!pending.isEmpty()) {
+        auto *item=pending.takeLast();
+        if(seen.contains(item) || seen.size()>=20000)return {{"ok",false},{"error","invalid-or-oversized-control-tree"}};
+        seen.insert(item);
+        if(item->objectName()=="moveUiProbe") {if(control)return {{"ok",false},{"error","duplicate-control"}};control=item;}
+        for(auto *child:item->childItems())pending.append(child);
+    }
+    if(!control)return {{"ok",false},{"error","control-unavailable"}};
+    const auto visiblePose=diagnostic::nativePose(document);
+    if(!visiblePose.value("ok").toBool())return {{"ok",false},{"error","visible-pose-unavailable"}};
+    const auto expanded=control->property("controlsExpanded");
+    struct RestoreExpanded {
+        QPointer<QQuickItem> control;QVariant value;
+        ~RestoreExpanded(){if(control && value.metaType().id()==QMetaType::Bool)control->setProperty("controlsExpanded",value);}
+    } restore{control,expanded};
+    if(expanded.metaType().id()==QMetaType::Bool)control->setProperty("controlsExpanded",true);
+    moveSession::ToolbarLease lease;
+    const auto error=lease.acquire(page.window);
+    if(!error.isEmpty())return {{"ok",false},{"error",error}};
+    const auto hiddenPose=diagnostic::nativePose(document);
+    lease.release();
+    const auto restoredPose=diagnostic::nativePose(document);
+    if(!visiblePose.value("ok").toBool() || !hiddenPose.value("ok").toBool() || restoredPose!=visiblePose ||
+       viewport(workflow::current())!=snapshot || !diaryMoveCaptureUiClear(hiddenPose,page.window->size()) ||
+       hiddenPose.value("states").toObject().value("toolbar").toObject().value("visible")!=QJsonValue(false) ||
+       hiddenPose.value("states").toObject().value("toolbar").toObject().value("shown")!=QJsonValue(false))
+        return {{"ok",false},{"error","calibration-pose-or-restoration-unverified"}};
+    return {{"ok",true},{"setupTelemetryOnly",true},{"normalZoomCertified",false},
+        {"viewport",snapshot},{"nativePose",visiblePose},{"hiddenNativePose",hiddenPose},
+        {"resource",diagnostic::documentViewResource()}};
+}
+#endif
 class Runtime final : public QObject {
 public:
     explicit Runtime(QObject *parent):QObject(parent) {
@@ -215,7 +262,7 @@ public:
         auto error=admission_->start(viewport(p));
 #endif
         if (!error.isEmpty()) {stop(error);return;}
-        const auto prep=workflow::run({{"op","prepare"},{"measuredCrop",QJsonArray{diaryMoveBoundedCaptureArea().x(),diaryMoveBoundedCaptureArea().y(),diaryMoveBoundedCaptureArea().width(),diaryMoveBoundedCaptureArea().height()}}});
+        const auto prep=workflow::run({{"op","prepare"},{"measuredCrop",QJsonArray{diaryMoveBoundedCaptureArea(p.window->size()).x(),diaryMoveBoundedCaptureArea(p.window->size()).y(),diaryMoveBoundedCaptureArea(p.window->size()).width(),diaryMoveBoundedCaptureArea(p.window->size()).height()}}});
         if (!prep.value("ok").toBool()) {stop(prep.value("error").toString());return;}
         busy_=true; stage_=Stage::BeforeFirst; clock_.start(); pause_.start();
         message_=
@@ -404,7 +451,7 @@ private:
     Stage stage_=Stage::Idle; bool busy_=false,started_=false,ready_=false,captureSecond_=false;
     QString message_=
 #ifdef INK_MOVE_PER_REQUEST
-        "Normal zoom: Blank, Dots small or Grid small";
+        "Ready: Blank, Dots small or Grid small";
 #elif defined(INK_MOVE_LIVE_TEST)
         "Live text: config and new reviewed reference required";
 #else
@@ -423,16 +470,20 @@ const char *value) {
     auto *app=QCoreApplication::instance();
     if (diagnostic::allowed() && app) {
         const QByteArray command=value?QByteArray(value):QByteArray();
-        auto job=[&] {
-            if (command=="inspect") {out=diagnostic::collect(true);return;}
+        auto job=[command,app] {
+            QJsonObject out;
+            if (command=="inspect") return diagnostic::collect(true);
+#ifdef INK_MOVE_PER_REQUEST
+            if (command=="calibration-preview") return moveDemo::calibrationPreview(
+                moveDemo::runtime && moveDemo::runtime->status().value("busy").toBool());
+#endif
             if (!moveDemo::runtime) moveDemo::runtime=new moveDemo::Runtime(app);
             if (command=="start") moveDemo::runtime->start();
             else if (command=="cancel") moveDemo::runtime->cancel();
-            else if (command!="status") {out={{"ok",false},{"error","unsupported-command"}};return;}
-            out=moveDemo::runtime->status();
+            else if (command!="status") return diaryDispatch::error("unsupported-command");
+            return moveDemo::runtime->status();
         };
-        if (QThread::currentThread()==app->thread()) job();
-        else if (!QMetaObject::invokeMethod(app,job,Qt::BlockingQueuedConnection)) out={{"ok",false},{"error","gui-unavailable"}};
+        out=diaryDispatch::run(std::move(job));
     }
     return strdup(QJsonDocument(out).toJson(QJsonDocument::Compact).constData());
 }

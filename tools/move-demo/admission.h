@@ -6,6 +6,8 @@
 // Never include this to replace the production capture gate without a concrete
 // reviewed live-native-pose provider. All methods run on the GUI thread.
 #include "../../src/capture-layout.h"
+#include "../../src/readonly-mapping.h"
+#include <QMetaMethod>
 #include <QGuiApplication>
 #include <QQuickItem>
 #include <QQuickWindow>
@@ -43,7 +45,7 @@ public:
 
 inline QString inspectOwnControl(QQuickWindow *window, bool suppressed) {
     if (!qGuiApp || QThread::currentThread()!=qGuiApp->thread()) return "not-gui-thread";
-    if (!window || !window->isVisible() || window->size()!=QSize(954,1696) ||
+    if (!window || !window->isVisible() || !diaryMoveWindowSupported(window->size()) ||
         window->devicePixelRatio()!=1 || !window->contentItem()) return "unsupported-window";
     QQuickItem *control=nullptr;
     QList<QQuickItem *> pending{window->contentItem()};
@@ -61,8 +63,30 @@ inline QString inspectOwnControl(QQuickWindow *window, bool suppressed) {
         }
         for (auto *child:item->childItems()) pending.append(child);
     }
+    QRectF expected(window->width()-376,window->height()-192,360,176);
+#ifdef INK_MOVE_PER_REQUEST
+    // Resolve the unique visible SceneView; a random parent cannot supply the
+    // expected rotated owner footprint. Admission still freezes its calibration.
+    QQuickItem *view=nullptr;
+    for(auto *item:visited)if(item->isVisible() && item->property("controller").value<QObject *>()) {
+        bool hasMapping=false;
+        for(int i=0;i<item->metaObject()->methodCount();++i)
+            if(item->metaObject()->method(i).name()=="viewToScene")hasMapping=true;
+        if(hasMapping) {if(view)return "ambiguous-owner-view";view=item;}
+    }
+    if(view) {
+        const auto snapshot=diaryMetadata::viewportSnapshot(qmlEngine(view),view);
+        try {diaryMoveFrame(snapshot);}catch(...){return "unsupported-owner-view-map";}
+        expected=view->mapRectToScene(QRectF(view->width()-376,view->height()-192,360,176));
+        // Bounding-box equality alone would admit reflections and wrong turns.
+        for(const QPointF local:{QPointF(0,0),QPointF(360,0),QPointF(0,176),QPointF(360,176)}) {
+            if(control && control->mapToScene(local)!=view->mapToScene(QPointF(view->width()-376,view->height()-192)+local))
+                return "owner-corner-map-changed";
+        }
+    }
+#endif
     if (!control || control->window()!=window || control->width()!=360 || control->height()!=176 ||
-        control->mapRectToScene(control->boundingRect())!=QRectF(578,1504,360,176) ||
+        control->mapRectToScene(control->boundingRect())!=expected ||
         control->rotation()!=0 || control->scale()!=1 || control->opacity()!=1 ||
         control->property("diaryCaptureSuppressed").metaType().id()!=QMetaType::Bool ||
         control->property("diaryCaptureSuppressed").toBool()!=suppressed ||
@@ -140,7 +164,7 @@ private:
         try {diaryExperimentalMoveMapping(viewport,reference_);}
         catch (...) {return "viewport-not-exact-reviewed-blank-reference";}
         if (!native_) return "live-native-pose-source-required";
-        return native_->verifyLivePose(window_,diaryMoveBoundedCaptureArea(),suppressed);
+        return native_->verifyLivePose(window_,diaryMoveBoundedCaptureArea(window_->size()),suppressed);
     }
     QPointer<QQuickWindow> window_;
     QPointer<QQuickItem> document_;

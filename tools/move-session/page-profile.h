@@ -26,19 +26,35 @@ inline QJsonObject loadProfile(const QString &path) {
     return doc.object();
 }
 inline QJsonObject referenceForStart(const QJsonObject &profile,const QJsonObject &current) {
-    if(profile.value("schema").toInt()!=3 ||
-       profile.value("captureArea").toArray()!=QJsonArray{0,0,954,1696} ||
-       profile.value("nativePose").toObject().isEmpty() ||
-       profile.value("hiddenNativePose").toObject().isEmpty())
-        throw std::runtime_error("Device setup profile schema 3 required");
-    const auto normal=profile.value("viewport").toObject();
+    const auto size=diaryMoveViewportSize(current);
+    auto selected=profile;
+    const int schema=profile.value("schema").toInt();
+    if(schema==4) {
+        const auto key=size.width()>size.height()?QStringLiteral("landscape"):QStringLiteral("portrait");
+        const auto orientation=profile.value("orientations").toObject().value(key).toObject();
+        if(orientation.isEmpty())throw std::runtime_error("Orientation calibration required");
+        for(const auto &field:{"viewport","captureArea","nativePose","hiddenNativePose"})
+            selected.insert(field,orientation.value(field));
+    } else if(schema!=3 || size!=QSize(954,1696)) {
+        throw std::runtime_error("Orientation-specific device setup profile required");
+    }
+    if(selected.value("captureArea").toArray()!=QJsonArray{0,0,diaryMoveFrame(current).physical.width(),diaryMoveFrame(current).physical.height()} ||
+       selected.value("nativePose").toObject().isEmpty() ||
+       selected.value("hiddenNativePose").toObject().isEmpty())
+        throw std::runtime_error("Reviewed orientation capture and native poses required");
+    const auto normal=selected.value("viewport").toObject();
     const auto calibrated=diaryExperimentalMoveMapping(normal,normal);
     const auto live=diaryExperimentalMoveMapping(current,current);
-    // Keep the reviewed normal zoom. A page's scene origin may differ, but it
-    // cannot redefine the normal scale. Rotation/shear/dimensions reject above.
-    if(std::abs(calibrated.sx-live.sx)>1e-9 || std::abs(calibrated.sy-live.sy)>1e-9)
-        throw std::runtime_error("Return to normal zoom before Start");
-    auto result=profile;
+    // The normal remains an immutable orientation anchor. Uniform zoom and pan
+    // may vary at Start; the entire live transform is frozen for this request.
+    // viewToScene gives scene units per screen pixel, so zoom is inverse scale.
+    const double zoom=calibrated.sx/live.sx;
+    if(diaryMoveViewportSize(normal)!=size || diaryMoveFrame(normal).physical!=diaryMoveFrame(current).physical ||
+       diaryMoveFrame(normal).degrees!=diaryMoveFrame(current).degrees ||
+       diaryMoveAxes(normal.value("points").toArray()).degrees!=diaryMoveAxes(current.value("points").toArray()).degrees ||
+       !std::isfinite(zoom) || zoom<0.5-1e-9 || zoom>4.0+1e-9)
+        throw std::runtime_error("Supported zoom is 50% to 400%; calibrated orientation required");
+    auto result=selected;
     result.insert("viewport",current); // Frozen for all admission boundaries.
     return result;
 }

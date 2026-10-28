@@ -23,7 +23,7 @@
 namespace moveLive {
 inline constexpr int outputTokens=800;
 inline QJsonObject payload(const QImage &image) {
-    if(image.size()!=diaryMoveBoundedCaptureArea().size()) throw std::runtime_error("Unexpected live question dimensions");
+    if(!diaryMoveWindowSupported(image.size())) throw std::runtime_error("Unexpected live question dimensions");
     QByteArray png;QBuffer buffer(&png);buffer.open(QIODevice::WriteOnly);
     if(!image.save(&buffer,"PNG") || png.size()>8*1024*1024) throw std::runtime_error("Question encoding failed");
     QJsonObject fields{{"kind",QJsonObject{{"type","string"},{"enum",QJsonArray{"text","needs_web","clarification","unsupported"}}}},

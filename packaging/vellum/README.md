@@ -53,6 +53,15 @@ upgrades and removes package-owned files without altering synthetic private stat
 No lifecycle hooks are present; tests disable script execution as additional
 containment. This is not live tablet or live-provider verification.
 
+Pass `-e TASK_UID="$(id -u)" -e TASK_GID="$(id -g)"` to the container. These
+non-root host IDs are mandatory. `/test` must be a dedicated disposable mount
+containing only synthetic outputs, not signing keys or real private state.
+An exit trap returns root-owned entries on that mount to the host identity on
+success, failure or handled termination, without following symlinks or changing
+0700/0600 fixture modes. Forced container kills cannot run the trap; inspect
+ownership before retaining interrupted outputs. Signing and input mounts remain
+separate and read-only.
+
 See [SETUP.md](SETUP.md) for private state, manual migration, calibration and
 upgrade/removal requirements. Do not pass a private signing key to a tablet or
 silently modify its trust store. An unsigned/untrusted-key bypass is not an

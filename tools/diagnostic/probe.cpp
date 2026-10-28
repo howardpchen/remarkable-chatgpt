@@ -16,6 +16,7 @@
 #include <cstring>
 #include <dlfcn.h>
 #include "policy.h"
+#include "../../src/gui-dispatch.h"
 #include "readonly-mapping.h"
 #include "readonly-template.h"
 #include "native-pose.h"
@@ -131,7 +132,8 @@ extern "C" char *ink_diary_probe(const char *argument) {
     auto *app=QCoreApplication::instance();
     if(diagnostic::allowed() && app) {
         const QByteArray request=argument ? QByteArray(argument) : QByteArray();
-        auto job=[&]{
+        auto job=[request]{
+            QJsonObject result;
             if(request.isEmpty())result=diagnostic::collect();
             else if(request=="native-pose") {
 #ifdef INK_DIAGNOSTIC_FERRARI
@@ -147,10 +149,9 @@ extern "C" char *ink_diary_probe(const char *argument) {
                     if(request==QByteArray("document-view-resource-chunk-")+QByteArray::number(chunk))
                         result=diagnostic::documentViewResource(chunk);
             }
+            return result;
         };
-        if(QThread::currentThread()==app->thread())job();
-        else if(!QMetaObject::invokeMethod(app,job,Qt::BlockingQueuedConnection))
-            result={{"ok",false},{"error","gui-unavailable"}};
+        result=diaryDispatch::run(std::move(job));
     }
     return strdup(QJsonDocument(result).toJson(QJsonDocument::Compact).constData());
 }

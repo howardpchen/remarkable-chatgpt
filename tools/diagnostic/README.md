@@ -231,3 +231,22 @@ wait through shutdown.
 These host checks do not emulate XOVI/broker/other-extension unload, target
 firmware objects, rendering threads, or the recorded tablet SIGSEGV. Passing
 checks establish local ownership/lifetime behavior, not a shutdown-crash fix.
+
+## Shutdown-safe dispatch hardening (2026-10-27)
+
+The diagnostic, Move runtime and offline-workflow endpoints now share
+`src/gui-dispatch.h`. App-startup hooks install an `aboutToQuit`/destruction
+intake latch before accepting requests. GUI jobs own their request captures;
+queued jobs are canceled at shutdown or a five-second pending deadline. An
+already-started job cannot be preempted and its timeout explicitly reports
+`gui-dispatch-timeout-in-flight-do-not-retry`; caller timeout never permits
+replaying a possible write. No reference to a returned caller stack survives.
+Same-thread GUI calls retain direct execution. Guard installation/readiness and
+normal app teardown are prerequisites; no concurrent arbitrary app destruction
+or live extension unload is supported.
+
+The build now runs the existing generated-link-table uniqueness checker. Run
+`test-lifecycle.sh` for rebuilt ownership and dispatch regressions. These changes
+cannot fix the recorded stock-process shutdown crash where the extension had
+not loaded. The separately built local broker lifecycle overlay is documented
+in `tools/broker-lifecycle/README.md`; it is not an automatic package update.

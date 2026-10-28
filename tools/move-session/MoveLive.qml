@@ -7,6 +7,15 @@ Item {
     id: moveUiProbe
     objectName: "moveUiProbe"
     z: 10000
+    // Retain the document bridge while visually parenting the widget to the
+    // reading-space SceneView. No request is started by this UI-only setup.
+    property var diaryDocumentRoot: null
+    Component.onCompleted: {
+        diaryDocumentRoot = parent;
+        if (diaryDocumentRoot && diaryDocumentRoot.diaryNativePoseObjects &&
+            diaryDocumentRoot.diaryNativePoseObjects.sceneView)
+            parent = diaryDocumentRoot.diaryNativePoseObjects.sceneView;
+    }
     anchors.right: parent ? parent.right : undefined
     anchors.bottom: parent ? parent.bottom : undefined
     anchors.margins: 16
@@ -35,18 +44,31 @@ Item {
     // Reuse the exact lexical bridge; the scoped Bindings below restore
     // the original native visibility binding/value, not an imperative overwrite.
     // Unknown/missing state must not offer dismissal without a recovery signal.
-    readonly property var nativeToolbar: (parent !== null &&
-        typeof parent.diaryNativePoseObjects !== "undefined" && parent.diaryNativePoseObjects &&
-        typeof parent.diaryNativePoseObjects.toolbar !== "undefined"
-        ? parent.diaryNativePoseObjects.toolbar : null)
+    readonly property var nativeToolbar: (diaryDocumentRoot !== null &&
+        typeof diaryDocumentRoot.diaryNativePoseObjects !== "undefined" && diaryDocumentRoot.diaryNativePoseObjects &&
+        typeof diaryDocumentRoot.diaryNativePoseObjects.toolbar !== "undefined"
+        ? diaryDocumentRoot.diaryNativePoseObjects.toolbar : null)
     readonly property bool toolbarsHidden: (nativeToolbar !== null &&
         typeof nativeToolbar !== "undefined" &&
         typeof nativeToolbar.shown === "boolean" && nativeToolbar.shown === false)
     readonly property bool nativeCaptureReady: (nativeToolbar !== null &&
         typeof nativeToolbar.visible === "boolean" && nativeToolbar.visible === false &&
         typeof nativeToolbar.shown === "boolean" && nativeToolbar.shown === false)
+    readonly property var nativeZoomButton: (diaryDocumentRoot !== null &&
+        diaryDocumentRoot.diaryNativePoseObjects &&
+        diaryDocumentRoot.diaryNativePoseObjects.zoomButton !== undefined
+        ? diaryDocumentRoot.diaryNativePoseObjects.zoomButton : null)
     readonly property bool nativeRequestToolbarReady: (nativeCaptureReady &&
-        typeof nativeToolbar.expanded === "boolean" && nativeToolbar.expanded === false)
+        typeof nativeToolbar.expanded === "boolean" && nativeToolbar.expanded === false &&
+        nativeZoomButton !== null && typeof nativeZoomButton.visible === "boolean" &&
+        nativeZoomButton.visible === false)
+    Binding {
+        target: moveUiProbe.nativeZoomButton
+        property: "visible"
+        value: false
+        when: moveUiProbe.diaryRequestToolbarSuppressed && moveUiProbe.nativeZoomButton !== null
+        restoreMode: Binding.RestoreBindingOrValue
+    }
     Binding {
         target: moveUiProbe.nativeToolbar
         property: "visible"
@@ -80,7 +102,7 @@ Item {
         else controlsExpanded = true; // Completion/error gets a fresh idle interval.
         restartIdleCollapse();
     }
-    visible: !dismissedUntilToolbar && !diaryCaptureSuppressed && parent !== null && parent.documentLoaded === true && parent.width >= 320 && parent.height >= 352
+    visible: !dismissedUntilToolbar && !diaryCaptureSuppressed && parent !== null && diaryDocumentRoot !== null && diaryDocumentRoot.documentLoaded === true && parent.width >= 320 && parent.height >= 352
     property bool demoBusy: false
     property bool demoArmed: false
     property int requestsRemaining: 0

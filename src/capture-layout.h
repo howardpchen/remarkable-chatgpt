@@ -1,5 +1,6 @@
 #pragma once
 #include <QRect>
+#include "move-orientation.h"
 #include <QSize>
 #include <cmath>
 #include <stdexcept>
@@ -18,10 +19,11 @@ inline DiaryCaptureLayout diaryCaptureLayout(const QSize &physicalPixels,
                                              qreal devicePixelRatio = 1,
                                              DiaryCaptureProfile profile = DiaryCaptureProfile::Rm2,
                                              const QRect &measuredContentArea = {}) {
-    const QSize expected = profile == DiaryCaptureProfile::Rm2 ? QSize(1404,1872) : QSize(954,1696);
+    const QSize expected = profile == DiaryCaptureProfile::Rm2 ? QSize(1404,1872) : logicalWindow;
     if (!std::isfinite(devicePixelRatio) || devicePixelRatio != 1 ||
-        physicalPixels != expected || logicalWindow != expected)
-        throw std::runtime_error("Unsupported capture/window geometry; portrait DPR 1 required");
+        physicalPixels != expected || logicalWindow != expected ||
+        (profile==DiaryCaptureProfile::ExperimentalMove && !diaryMoveWindowSupported(expected)))
+        throw std::runtime_error("Unsupported capture/window geometry; matching pixels at DPR 1 required");
     const QRect area = profile == DiaryCaptureProfile::Rm2 ? QRect(150,0,1174,1752) : measuredContentArea;
     if (area.width() < 300 || area.height() <= 0 || !QRect(QPoint(0,0),expected).contains(area))
         throw std::runtime_error("Measured notebook capture area required");
@@ -66,30 +68,17 @@ inline DiaryMoveMapping diaryExperimentalMoveMapping(const QJsonObject &snapshot
         ;
     if (!supported ||
         normalReference.isEmpty() || snapshot != normalReference ||
-        snapshot.value("width").toDouble() != 954 ||
-        snapshot.value("height").toDouble() != 1696 ||
-        snapshot.value("windowWidth").toDouble() != 954 ||
-        snapshot.value("windowHeight").toDouble() != 1696 ||
         snapshot.value("devicePixelRatio").toDouble(0) != 1)
         throw std::runtime_error("Supported template and normal Move viewport required");
+    const auto size=diaryMoveViewportSize(snapshot);
+    // Factory grid/dot masking is still portrait-only until landscape pitches
+    // and template identity have been measured. Blank has no template lattice.
+    if(size==QSize(1696,954) && name!=QLatin1String("Blank"))
+        throw std::runtime_error("Landscape currently requires Blank template");
     const auto points=snapshot.value("points").toArray();
     if (points.size()!=3) throw std::runtime_error("Move mapping requires three calibration points");
-    qreal p[3][2];
-    for(int i=0;i<3;++i) {
-        const auto point=points[i].toArray();
-        if(point.size()!=2) throw std::runtime_error("Invalid Move mapping point");
-        for(int j=0;j<2;++j) {
-            if(!point[j].isDouble() || !std::isfinite(point[j].toDouble()))
-                throw std::runtime_error("Non-finite Move mapping");
-            p[i][j]=point[j].toDouble();
-        }
-    }
-    const qreal sx=(p[1][0]-p[0][0])/100, sy=(p[2][1]-p[0][1])/100;
-    if (sx<=0 || sy<=0 || sx>4 || sy>4 ||
-        std::abs(p[1][1]-p[0][1])>0.001 || std::abs(p[2][0]-p[0][0])>0.001 ||
-        std::abs(sx-sy)>0.00001)
-        throw std::runtime_error("Unsupported Move transform");
-    return {sx,sy,{p[0][0],p[0][1]}};
+    const auto axes=diaryMoveAxes(points);
+    return {axes.scale,axes.scale,axes.zero};
 }
 inline DiaryCaptureLayout diaryExperimentalMoveLayout(const QSize &pixels, const QSize &window,
                                                       qreal dpr) {
@@ -97,18 +86,20 @@ inline DiaryCaptureLayout diaryExperimentalMoveLayout(const QSize &pixels, const
 }
 // Only the separate live target includes the top strip. Historical offline
 // fixtures keep their measured crop and consumed-run semantics unchanged.
-inline QRect diaryMoveBoundedCaptureArea() {
+inline QRect diaryMoveBoundedCaptureArea(const QSize &size=QSize(954,1696)) {
+    if(!diaryMoveWindowSupported(size))throw std::runtime_error("Unsupported Move capture size");
 #ifdef INK_MOVE_LIVE_TEST
-    return {0,0,954,1696};
+    return {QPoint(0,0),size};
 #else
     return {120,112,834,1584};
 #endif
 }
 // Full-page structural containers are expected; any smaller visible UI item
 // overlapping the full-screen capture must be absent, not silently cropped.
-inline bool diaryMoveCaptureUiClear(const QJsonObject &pose) {
+inline bool diaryMoveCaptureUiClear(const QJsonObject &pose,const QSize &size=QSize(954,1696)) {
+    if(!diaryMoveWindowSupported(size))return false;
     if (!pose.value("ok").toBool() || !pose.value("items").isArray()) return false;
-    const QRectF content(0,0,954,1696);
+    const QRectF content(QPointF(0,0),QSizeF(size));
     for (const auto &entry:pose.value("items").toArray()) {
         const auto item=entry.toObject();
         const auto a=item.value("rect").toArray();
@@ -127,6 +118,9 @@ struct DiaryMovePlacement {
 inline DiaryMovePlacement diaryExperimentalMovePlacement(const QImage &rendered, int top,
         const QJsonObject &snapshot, const QJsonObject &normalReference) {
     const auto mapping=diaryExperimentalMoveMapping(snapshot,normalReference);
+    if(diaryMoveViewportSize(snapshot)!=QSize(954,1696) ||
+       diaryMoveAxes(snapshot.value("points").toArray()).degrees!=0)
+        throw std::runtime_error("Historical Move placement requires portrait mapping");
     const QRectF area(120,112,834,1584);
     // Reject BEFORE resizing: floor rounding must not make an oversized answer
     // appear to fit. This path never extrapolates past the captured page.

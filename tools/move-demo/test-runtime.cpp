@@ -5,6 +5,7 @@
 #include <QTest>
 #include <cassert>
 #include <iostream>
+#include <QLineF>
 #ifdef INK_MOVE_LIVE_TEST
 #include "../move-live/mock-transport.h"
 #endif
@@ -19,13 +20,15 @@ class MockView : public QQuickItem {
 public:
     qreal factor=0.859848484848485;
     QPointF origin;
-    Q_INVOKABLE QVariant viewToScene(QVariant xy) {return xy.toPointF()*factor+origin;}
+    int degrees=0;
+    Q_INVOKABLE QVariant viewToScene(QVariant xy) {return QTransform().rotate(degrees).map(xy.toPointF()*factor)+origin;}
 };
 class MockController : public QObject {
     Q_OBJECT
 public:
     int calls=0;
-    Q_INVOKABLE void insertImageFileAsSceneItem(QUrl,QPointF) {++calls;}
+    QPointF lastTarget;
+    Q_INVOKABLE void insertImageFileAsSceneItem(QUrl,QPointF point) {++calls;lastTarget=point;}
 };
 namespace moveDemo {
 struct RuntimeTest {
@@ -58,23 +61,34 @@ int main(int argc,char **argv) {
     const int initialAllowance=moveSession::remaining(workflow::sessionRoot);
 #endif
     QQmlEngine engine; QQuickWindow window;
-    window.resize(954,1696);
+    const QString scenario=argc>1?QString::fromLocal8Bit(argv[1]):"success";
+    const bool landscape=scenario.startsWith("landscape");
+    const bool split=scenario.startsWith("landscape-split");
+    const bool variableZoom=(scenario.startsWith("zoom-") && scenario!="zoom-change" && scenario!="zoom-change-api") || scenario.startsWith("landscape-split-zoom-");
+    const bool zoomFailure=variableZoom && scenario.contains("change-");
+    const QSize size=landscape?QSize(1696,954):QSize(954,1696);
+    window.resize(split?QSize(954,1696):size);
     QQmlComponent rootComponent(&engine);
-    rootComponent.setData("import QtQuick 2.15\nItem { width:954; height:1696; property bool documentLoaded:true; property QtObject document; property QtObject sceneController; property int currentPage:0; property string currentPageId:'synthetic-page'; property alias testToolbar:bar; Item { id:bar; visible:true; property bool expanded:true } }",QUrl());
+    rootComponent.setData("import QtQuick 2.15\nItem { width:954; height:1696; property bool documentLoaded:true; property QtObject document; property QtObject sceneController; property int currentPage:0; property string currentPageId:'synthetic-page'; property alias testToolbar:bar; Item { id:bar; visible:true; property bool expanded:true; readonly property bool shown:visible && expanded } }",QUrl());
     auto *root=qobject_cast<QQuickItem *>(rootComponent.create()); assert(root);
-    root->setParentItem(window.contentItem());
+    root->setParentItem(window.contentItem());root->setSize(split?QSize(954,1696):size);
     MockDocument document; MockController controller; MockView view;
     root->setProperty("document",QVariant::fromValue<QObject *>(&document));
     root->setProperty("sceneController",QVariant::fromValue<QObject *>(&controller));
-    view.setParentItem(root); view.setSize({954,1696});
+    view.setParentItem(root); view.setSize(size);
+    if(split) {view.setTransformOrigin(QQuickItem::TopLeft);view.setRotation(90);view.setPosition({954,0});}
+    if(scenario=="landscape-cw")view.degrees=90;
+    if(scenario=="landscape-ccw")view.degrees=270;
     view.setProperty("controller",QVariant::fromValue<QObject *>(&controller));
     QQmlEngine::setContextForObject(&view,engine.rootContext());
+    engine.rootContext()->setContextProperty("testDocument",root);
     QQmlComponent panelComponent(&engine);
     panelComponent.setData("import QtQuick 2.15\nRectangle { id:panel; objectName:'moveUiProbe'; width:360; height:176; x:578; y:1504; readonly property string diaryCaptureOwner:'ink-diary-owned-control-v1'; property bool diaryCaptureSuppressed:false; visible:!diaryCaptureSuppressed; color:'white'; "
-        "property bool requestBridgeAvailable:true; property bool diaryRequestToolbarSuppressed:false; readonly property bool nativeRequestToolbarReady: requestBridgeAvailable && parent && !parent.testToolbar.visible && !parent.testToolbar.expanded; "
-        "Binding { target:panel.parent ? panel.parent.testToolbar : null; property:'visible'; value:false; when:panel.diaryRequestToolbarSuppressed; restoreMode:Binding.RestoreBindingOrValue } "
-        "Binding { target:panel.parent ? panel.parent.testToolbar : null; property:'expanded'; value:false; when:panel.diaryRequestToolbarSuppressed; restoreMode:Binding.RestoreBindingOrValue } }",QUrl());
-    auto *panel=qobject_cast<QQuickItem *>(panelComponent.create()); assert(panel); panel->setParentItem(root);
+        "property bool requestBridgeAvailable:true; property bool diaryRequestToolbarSuppressed:false; readonly property bool nativeRequestToolbarReady: requestBridgeAvailable && parent && !testDocument.testToolbar.visible && !testDocument.testToolbar.expanded; "
+        "Binding { target:panel.parent ? testDocument.testToolbar : null; property:'visible'; value:false; when:panel.diaryRequestToolbarSuppressed; restoreMode:Binding.RestoreBindingOrValue } "
+        "Binding { target:panel.parent ? testDocument.testToolbar : null; property:'expanded'; value:false; when:panel.diaryRequestToolbarSuppressed; restoreMode:Binding.RestoreBindingOrValue } }",QUrl());
+    auto *panel=qobject_cast<QQuickItem *>(panelComponent.create()); assert(panel); panel->setParentItem(split?&view:root);
+    panel->setPosition({qreal(size.width()-376),qreal(size.height()-192)});
     auto *toolbar=root->property("testToolbar").value<QObject *>();assert(toolbar);
     window.show(); assert(QTest::qWaitFor([&]{return window.isExposed();}));
     const auto page=workflow::current(); assert(page.view==&view && page.document==root);
@@ -86,7 +100,7 @@ int main(int argc,char **argv) {
 #endif
     QFile reference(workflow::base+referenceName); assert(reference.open(QIODevice::WriteOnly));
 #ifdef INK_MOVE_LIVE_TEST
-    reference.write(QJsonDocument(QJsonObject{{"schema",
+    auto profile=QJsonObject{{"schema",
 #ifdef INK_MOVE_PER_REQUEST
         3
 #else
@@ -94,16 +108,42 @@ int main(int argc,char **argv) {
 #endif
     },{"viewport",vp},
         {"nativePose",QJsonObject{{"ok",true}}},{"hiddenNativePose",QJsonObject{{"ok",true}}},
-        {"captureArea",QJsonArray{0,0,954,1696}}}).toJson());
+        {"captureArea",QJsonArray{0,0,window.width(),window.height()}}};
+#ifdef INK_MOVE_PER_REQUEST
+    if(landscape && scenario!="landscape-missing" && scenario!="landscape-split-missing") {
+        profile.insert("schema",4);
+        const auto calibration=profile;
+        profile.insert("orientations",QJsonObject{{"landscape",calibration}});
+    }
+#endif
+    reference.write(QJsonDocument(profile).toJson());
 #else
     reference.write(QJsonDocument(QJsonObject{{"schema",1},{"viewport",vp}}).toJson());
 #endif
     reference.close();
     assert(reference.setPermissions(QFileDevice::ReadOwner|QFileDevice::WriteOwner));
-    const QString scenario=argc>1?QString::fromLocal8Bit(argv[1]):"success";
+#ifdef INK_MOVE_PER_REQUEST
+    if(scenario=="landscape-split-preview") {
+        QVariantMap bindings;
+        const QStringList names={"_uiContainer","pages","pageSlider","pageLabel","titleLabel","newPageButton","_toolbarTooltipOverlay","selectionHelper","formatSettings","formatMenuDelegate","addTagPopup","_searchResultsHeader","searchResultsProgress","notificationBar","hwcDialog","adjustViewPopup","_popupOverlay","zoomButton","scrollLockVisualCue","writingFormatsToolTip","connectivityDialogContainerItem","_tocDeleteLoader","_tocRenamePopup","_tocCrossDocErrorLoader","_tocCrossDocDownloadLoader"};
+        QQuickItem hidden(root);hidden.setVisible(false);
+        for(const auto &name:names)bindings.insert(name,QVariant::fromValue<QObject *>(&hidden));
+        bindings.insert("sceneView",QVariant::fromValue<QObject *>(&view));bindings.insert("toolbar",QVariant::fromValue(toolbar));
+        root->setProperty("diaryNativePoseObjects",bindings);
+        const auto before=diagnostic::nativePose(root);assert(before["ok"].toBool());
+        const auto preview=moveDemo::calibrationPreview(false);assert(preview["ok"].toBool());
+        assert(preview["setupTelemetryOnly"].toBool() && !preview["normalZoomCertified"].toBool());
+        assert(preview["viewport"]==vp && preview["hiddenNativePose"].toObject()["states"].toObject()["toolbar"].toObject()["visible"]==false);
+        assert(diagnostic::nativePose(root)==before && !panel->property("diaryRequestToolbarSuppressed").toBool());
+        assert(!moveDemo::calibrationPreview(true)["ok"].toBool());
+        assert(moveSession::remaining(workflow::sessionRoot)==initialAllowance && !QFile::exists(workflow::sessionRoot+"/1"));
+        std::cout<<"PASS calibration telemetry: exact pose restoration, busy refusal, no capture, transport, reservation or insertion\n";
+        hidden.setParentItem(nullptr);hidden.setParent(nullptr);delete panel;view.setParentItem(nullptr);delete root;return 0;
+    }
+#endif
     int captures=0,nativeChecks=0;
     bool captureVisible=false;
-    QImage image(954,1696,QImage::Format_RGB32); image.fill(Qt::white); image.setPixelColor(400,160,Qt::black);
+    QImage image(size,QImage::Format_RGB32); image.fill(Qt::white); image.setPixelColor(400,160,Qt::black);
 #ifdef INK_MOVE_LIVE_TEST
     // Writing at the very first row must survive crop, payload and placement.
     image.setPixelColor(400,160,Qt::white);
@@ -111,15 +151,20 @@ int main(int argc,char **argv) {
 #endif
     workflow::captureHandler=[&](char *argument) {
         ++captures; captureVisible |= panel->isVisible();
+        if(scenario=="landscape-change-capture")window.resize(954,1696);
+        if(scenario=="landscape-split-change-capture")view.setRotation(270);
         const auto path=QString::fromUtf8(argument).section(',',0,0);
         if (scenario!="capture-timeout") {
-            auto frame=image;
+            auto frame=split?image.transformed(QTransform().rotate(90)):image;
+            if(scenario=="landscape-frame-mismatch")frame=QImage(954,1696,QImage::Format_RGB32);
+            if(scenario=="landscape-split-frame-mismatch")frame=image;
             if (scenario=="changed-pixels" && captures==2) frame.setPixelColor(450,diaryMoveBoundedCaptureArea().y()+80,Qt::black);
             QTimer::singleShot(10,&app,[frame,path]{assert(frame.save(path));});
         }
         if (scenario=="page-change") root->setProperty("currentPageId","changed");
         if (scenario=="template-change") document.name="Dots";
         if (scenario=="zoom-change") view.factor*=1.2;
+        if(variableZoom && scenario.endsWith("change-capture"))view.origin+=QPointF(10,20);
         return strdup("success");
     };
 #ifdef INK_MOVE_LIVE_TEST
@@ -131,20 +176,24 @@ int main(int argc,char **argv) {
     if(scenario=="unsupported") manager.response=mockAnswer("Search not supported","unsupported");
     if(scenario=="too-large") manager.response=mockAnswer(QString("A long line of text.\n").repeated(160));
     if(scenario=="http-error")manager.code=401;
-    if(scenario=="shutdown-api" || scenario=="teardown-api" || scenario=="api-timeout" || scenario=="cancel-api" || scenario=="page-change-api" || scenario=="template-change-api" || scenario=="zoom-change-api" || scenario=="dots-change-api")manager.delay=-1;
+    if(scenario=="shutdown-api" || scenario=="teardown-api" || scenario=="api-timeout" || scenario=="cancel-api" || scenario=="page-change-api" || scenario=="template-change-api" || scenario=="zoom-change-api" || scenario=="dots-change-api" || scenario=="landscape-change-api" || scenario=="landscape-split-change-api")manager.delay=-1;
+    if(variableZoom && scenario.endsWith("change-api"))manager.delay=-1;
     manager.onDispatch=[&]{
+        if(variableZoom && scenario.endsWith("change-api"))QTimer::singleShot(10,&app,[&]{view.origin+=QPointF(10,20);});
         assert(panel->isVisible()); // Own UI restored throughout API wait.
 #ifdef INK_MOVE_PER_REQUEST
         assert(panel->property("diaryRequestToolbarSuppressed").toBool());
         assert(!toolbar->property("visible").toBool() && !toolbar->property("expanded").toBool());
 #endif
+        if(scenario=="landscape-split-change-api")QTimer::singleShot(10,&app,[&]{view.setRotation(270);});
+        if(scenario=="landscape-change-api")QTimer::singleShot(10,&app,[&]{window.resize(954,1696);});
         if(scenario=="dots-change-api")QTimer::singleShot(10,&app,[&]{document.name="P Grid small";});
         if(scenario=="same-page-ink")image.setPixelColor(450,80,Qt::black);
         const auto body=QJsonDocument::fromJson(manager.sent).object();
         const auto parts=body["input"].toArray().first().toObject()["content"].toArray();
         const auto uri=parts[1].toObject()["image_url"].toString();
         const auto sentImage=QImage::fromData(QByteArray::fromBase64(uri.section(',',1).toLatin1()));
-        assert(sentImage.size()==QSize(954,1696) && sentImage.pixelColor(0,0)==Qt::black);
+        assert(sentImage.size()==size && sentImage.pixelColor(0,0)==Qt::black);
         if(scenario=="dots-before-start" || (scenario=="grid-before-start" || scenario=="grid-table-before-start"))assert(workflow::samePixels(sentImage,image));
         if(scenario=="shutdown-api")QTimer::singleShot(10,&app,[&]{assert(QMetaObject::invokeMethod(&app,"aboutToQuit",Qt::DirectConnection));});
         if(scenario=="cancel-api")QTimer::singleShot(10,&app,[&]{moveDemo::runtime->cancel();});
@@ -194,10 +243,10 @@ int main(int argc,char **argv) {
         std::cout<<"PASS toolbar refusal before allocation, no stolen lease: "<<scenario.toStdString()<<"\n";
         delete panel;view.setParentItem(nullptr);delete root;return 0;
     }
-    if(scenario=="missing-profile" || scenario=="public-profile" || scenario=="zoomed-before-start" || scenario=="template-before-start") {
+    if(scenario=="landscape-missing" || scenario=="landscape-split-missing" || scenario=="missing-profile" || scenario=="public-profile" || scenario=="zoomed-before-start" || scenario=="template-before-start") {
         if(scenario=="missing-profile")assert(reference.remove());
         if(scenario=="public-profile")assert(reference.setPermissions(QFileDevice::ReadOwner|QFileDevice::WriteOwner|QFileDevice::ReadOther));
-        if(scenario=="zoomed-before-start")view.factor*=1.2;
+        if(scenario=="zoomed-before-start")view.factor/=4.1;
         if(scenario=="template-before-start")document.name="Dots";
         runtime.start();
         assert(!runtime.status()["busy"].toBool() && controller.calls==0 && manager.requests==0 && captures==0);
@@ -231,6 +280,14 @@ int main(int argc,char **argv) {
         }
         painter.end();
         if(!scenario.endsWith("-empty"))image.setPixelColor(0,0,Qt::black);
+    }
+#endif
+#ifdef INK_MOVE_PER_REQUEST
+    if(variableZoom) {
+        view.factor/=scenario.endsWith("out")?0.5:scenario.endsWith("max")?4.0:2.0;
+        view.origin=QPointF(-417,213);
+        if(scenario=="zoom-grid")document.name="P Grid small";
+        if(scenario=="zoom-dots")document.name="P Dots S";
     }
 #endif
     runtime.start(); assert(runtime.status()["busy"].toBool());
@@ -289,7 +346,7 @@ int main(int argc,char **argv) {
     assert(captures<=1 && !QFile::exists(workflow::base+"/check.png"));
 #endif
     assert(QFile::exists(workflow::base+"/START_CONSUMED"));
-    const bool successExpected=scenario=="success" || scenario=="translated-before-start" || scenario=="dots-before-start" || (scenario=="grid-before-start" || scenario=="grid-table-before-start")
+    const bool successExpected=(variableZoom && !zoomFailure) || (landscape && !variableZoom && !scenario.contains("change-") && !scenario.contains("frame-mismatch")) || scenario=="success" || scenario=="translated-before-start" || scenario=="dots-before-start" || (scenario=="grid-before-start" || scenario=="grid-table-before-start")
 #ifdef INK_MOVE_SINGLE_CAPTURE
         || scenario=="same-page-ink" || scenario=="changed-pixels"
 #endif
@@ -303,9 +360,18 @@ int main(int argc,char **argv) {
 #endif
             && nativeChecks>=5);
         assert(QFile::exists(workflow::base+"/INSERTION_CONSUMED"));
+        if(landscape || variableZoom) {
+            const auto axes=diaryMoveReadingAxes(moveDemo::viewport(page));
+            assert(axes.degrees==view.degrees);
+            if(!variableZoom)assert(view.degrees ? workflow::answer.height()>1000 : workflow::answer.width()>1000);
+            const double height=(view.degrees?workflow::answer.width():workflow::answer.height())/view.factor;
+            const double x=120+(size.width()-120)/2.0;
+            const auto expected=QTransform().rotate(view.degrees).map(QPointF(x,45+height/2)*view.factor)+view.origin;
+            assert(QLineF(expected,controller.lastTarget).length()<1e-6);
+        }
     } else {assert(controller.calls==0);assert(!QFile::exists(workflow::base+"/INSERTION_CONSUMED"));}
 #ifdef INK_MOVE_LIVE_TEST
-    const bool apiExpected=scenario=="success" || scenario=="translated-before-start" || scenario=="dots-before-start" || (scenario=="grid-before-start" || scenario=="grid-table-before-start") || scenario=="same-page-ink" || scenario=="changed-pixels" || scenario=="malformed" || scenario=="unsupported" || scenario=="needs-web" || scenario=="clarification" || scenario=="unknown-kind" || scenario=="too-large" || scenario=="http-error" || scenario=="api-timeout" || scenario.endsWith("-api");
+    const bool apiExpected=(variableZoom && !scenario.endsWith("change-capture")) || (landscape && !variableZoom && !scenario.contains("change-capture") && !scenario.contains("frame-mismatch")) || scenario=="success" || scenario=="translated-before-start" || scenario=="dots-before-start" || (scenario=="grid-before-start" || scenario=="grid-table-before-start") || scenario=="same-page-ink" || scenario=="changed-pixels" || scenario=="malformed" || scenario=="unsupported" || scenario=="needs-web" || scenario=="clarification" || scenario=="unknown-kind" || scenario=="too-large" || scenario=="http-error" || scenario=="api-timeout" || scenario.endsWith("-api");
     assert(manager.requests==(apiExpected?1:0));
     if(scenario=="shutdown-api" || scenario=="cancel-api" || scenario=="api-timeout" || scenario.endsWith("change-api"))assert(manager.aborts==1);
 #endif

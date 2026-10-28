@@ -42,10 +42,10 @@ int main(int argc,char **argv) {
     QQmlEngine engine; QQuickWindow window; window.resize(954,1696);
     QQmlComponent rootComponent(&engine);
     rootComponent.setData("import QtQuick 2.15\nItem {id:root; width:954;height:1696;property bool documentLoaded:true; "
-        "property bool toolbarVisibleSetting:true; property alias testToolbar:bar; "
+        "property bool zoomVisibleSetting:false; property alias testZoom:zoom; Item {id:zoom; visible:root.zoomVisibleSetting; width:60;height:60} property bool toolbarVisibleSetting:true; property alias testToolbar:bar; "
         "Item {id:bar; visible:root.toolbarVisibleSetting; width:112;height:1696; property bool expanded:true; readonly property bool shown:visible && expanded; "
         "Rectangle {objectName:'fakeNativeClose'; x:842; width:112;height:112; color:'black'; visible:bar.expanded}} "
-        "property var diaryNativePoseObjects: ({toolbar:bar})}",QUrl());
+        "property var diaryNativePoseObjects: ({toolbar:bar,zoomButton:zoom})}",QUrl());
     auto *root=qobject_cast<QQuickItem *>(rootComponent.create());assert(root);root->setParentItem(window.contentItem());
     QQmlComponent component(&engine,QUrl::fromLocalFile(QDir::current().absoluteFilePath(
 #if defined(INK_MOVE_PER_REQUEST)
@@ -162,6 +162,7 @@ int main(int argc,char **argv) {
     panel->setProperty("diaryCaptureSuppressed",false);assert(panel->isVisible());
 #ifdef INK_MOVE_LIVE_TEST
     auto *toolbar=root->property("testToolbar").value<QObject *>();assert(toolbar);
+    auto *zoomButton=root->property("testZoom").value<QObject *>();assert(zoomButton);
     FakeBroker::armed=false;QTest::qWait(300);assert(!panel->property("demoArmed").toBool());
     const int startsBefore=FakeBroker::starts,cancelsBefore=FakeBroker::cancels;
     assert(launcher->isVisible() && !dismiss->isVisible());
@@ -217,11 +218,15 @@ int main(int argc,char **argv) {
     // Request lease keeps only the native toolbar hidden while capture leases
     // may come and go. Use the actual candidate QML, not a fake request flag.
     panel->setProperty("controlsExpanded",true); // Explicit Start requires the expanded owner boundary.
-    for (bool originalVisible:{false,true}) for (bool originalExpanded:{false,true}) {
+    for (bool originalVisible:{false,true}) for (bool originalExpanded:{false,true}) for(bool originalZoom:{false,true}) {
+        root->setProperty("zoomVisibleSetting",originalZoom);
         root->setProperty("toolbarVisibleSetting",originalVisible);
         toolbar->setProperty("expanded",originalExpanded);
         moveSession::ToolbarLease request;
         assert(request.acquire(&window).isEmpty());
+        assert(!zoomButton->property("visible").toBool());
+        root->setProperty("zoomVisibleSetting",!originalZoom);
+        assert(!zoomButton->property("visible").toBool());
         assert(panel->isVisible() && !toolbar->property("visible").toBool() && !toolbar->property("expanded").toBool());
         moveSession::ToolbarLease duplicate;
         assert(!duplicate.acquire(&window).isEmpty());
@@ -236,11 +241,16 @@ int main(int argc,char **argv) {
         capture.release();
         assert(panel->isVisible() && !toolbar->property("visible").toBool() && !toolbar->property("expanded").toBool());
         request.release();request.release();
+        assert(zoomButton->property("visible").toBool()==!originalZoom);
+        root->setProperty("zoomVisibleSetting",originalZoom);
+        assert(zoomButton->property("visible").toBool()==originalZoom);
         assert(toolbar->property("visible").toBool()==originalVisible);
         assert(toolbar->property("expanded").toBool()==originalExpanded);
         root->setProperty("toolbarVisibleSetting",!originalVisible);
         assert(toolbar->property("visible").toBool()==!originalVisible);
     }
+    root->setProperty("zoomVisibleSetting",false);
+    std::cout<<"PASS zoom button lease: both initial states, nested capture, source changes and binding restoration\n";
     root->setProperty("toolbarVisibleSetting",true);toolbar->setProperty("expanded",true);
     {
         moveSession::ToolbarLease teardown;
@@ -256,13 +266,13 @@ int main(int argc,char **argv) {
         assert(!unavailable.acquire(&window).isEmpty());
         assert(!panel->property("diaryRequestToolbarSuppressed").toBool());
     }
-    root->setProperty("diaryNativePoseObjects",QVariantMap{{"toolbar",QVariant::fromValue(toolbar)}});
+    root->setProperty("diaryNativePoseObjects",QVariantMap{{"toolbar",QVariant::fromValue(toolbar)},{"zoomButton",QVariant::fromValue(zoomButton)}});
     {
         // Exercise the real numeric pose collector with a synthetic complete
         // native bridge. The hidden pose must match exactly, not a whitelist
         // with toolbar fields deleted or an arbitrary live pose blessed at Start.
         auto *stub=new QQuickItem(root);stub->setVisible(false);
-        QVariantMap bridge{{"toolbar",QVariant::fromValue(toolbar)}};
+        QVariantMap bridge{{"toolbar",QVariant::fromValue(toolbar)},{"zoomButton",QVariant::fromValue(zoomButton)}};
         for(const auto &id:diagnostic::nativePose(root).value("missing").toArray())
             bridge.insert(id.toString(),QVariant::fromValue<QObject *>(stub));
         root->setProperty("diaryNativePoseObjects",bridge);
@@ -272,6 +282,7 @@ int main(int argc,char **argv) {
         assert(reviewedHidden.value("ok").toBool());
         panel->setProperty("diaryCaptureSuppressed",false);
         toolbar->setProperty("expanded",true);
+        root->setProperty("zoomVisibleSetting",true);
         const auto shownPose=diagnostic::nativePose(root);assert(shownPose!=reviewedHidden);
         moveSession::ToolbarLease request;assert(request.acquire(&window).isEmpty());
         assert(diagnostic::nativePose(root)==reviewedHidden);
@@ -282,7 +293,8 @@ int main(int argc,char **argv) {
         assert(diagnostic::nativePose(root)==reviewedHidden);
         panel->setProperty("diaryCaptureSuppressed",false);
         request.release();assert(diagnostic::nativePose(root)==shownPose);
-        root->setProperty("diaryNativePoseObjects",QVariantMap{{"toolbar",QVariant::fromValue(toolbar)}});
+        root->setProperty("zoomVisibleSetting",false);
+        root->setProperty("diaryNativePoseObjects",QVariantMap{{"toolbar",QVariant::fromValue(toolbar)},{"zoomButton",QVariant::fromValue(zoomButton)}});
         delete stub;
     }
     std::cout<<"PASS: request-scoped native toolbar hiding, capture nesting, exact prior-state/binding restoration, exclusive ownership, unavailable bridge refusal\n";
@@ -324,12 +336,43 @@ int main(int argc,char **argv) {
 #endif
     root->setProperty("documentLoaded",false);assert(!panel->isVisible());
 #ifdef INK_MOVE_LIVE_TEST
-    root->setProperty("diaryNativePoseObjects",QVariantMap{{"toolbar",QVariant::fromValue(toolbar)}});
+    root->setProperty("diaryNativePoseObjects",QVariantMap{{"toolbar",QVariant::fromValue(toolbar)},{"zoomButton",QVariant::fromValue(zoomButton)}});
     root->setProperty("toolbarVisibleSetting",true);
 #ifdef INK_MOVE_PER_REQUEST
     root->setProperty("documentLoaded",true);
     panel->setProperty("controlsExpanded",true);
     toolbar->setProperty("expanded",true);
+    // Actual production QML anchors retain the exact owner boundary in landscape.
+    window.resize(1696,954);root->setSize({1696,954});QTest::qWait(60);
+    assert(panel->mapRectToScene(panel->boundingRect())==QRectF(1320,762,360,176));
+    assert(moveDemo::inspectOwnControl(&window,false).isEmpty());
+    auto *landscapeCard=panel->findChild<QQuickItem *>("moveUiProbeCard");assert(landscapeCard);
+    assert(QRectF(0,0,1696,954).contains(landscapeCard->mapRectToScene(landscapeCard->boundingRect())));
+    snapshot("landscape-expanded");
+    panel->setProperty("controlsExpanded",false);QTest::qWait(20);
+    assert(panel->mapRectToScene(panel->boundingRect())==QRectF(1608,866,72,72));
+    snapshot("landscape-collapsed");
+    panel->setProperty("controlsExpanded",true);
+    window.resize(954,1696);root->setSize({954,1696});QTest::qWait(60);
+    assert(moveDemo::inspectOwnControl(&window,false).isEmpty());
+    std::cout<<"PASS actual QML landscape/portrait transition, expanded owner and collapsed launcher\n";
+    // The actual production widget is parented to the native reading view on
+    // load, retaining document/toolbar bindings across the visual reparent.
+    auto *readingView=new QQuickItem(root);
+    readingView->setSize({1696,954});readingView->setTransformOrigin(QQuickItem::TopLeft);
+    readingView->setRotation(90);readingView->setPosition({954,0});
+    root->setProperty("diaryNativePoseObjects",QVariantMap{{"toolbar",QVariant::fromValue(toolbar)},{"zoomButton",QVariant::fromValue(zoomButton)},{"sceneView",QVariant::fromValue(readingView)}});
+    auto *splitPanel=qobject_cast<QQuickItem *>(component.beginCreate(engine.rootContext()));assert(splitPanel);
+    splitPanel->setParentItem(root);component.completeCreate();QTest::qWait(40);
+    assert(splitPanel->parentItem()==readingView && splitPanel->property("nativeToolbar").value<QObject *>()==toolbar);
+    splitPanel->setProperty("controlsExpanded",true);QTest::qWait(20);
+    assert(splitPanel->mapRectToScene(splitPanel->boundingRect())==QRectF(16,1320,176,360));
+    assert(splitPanel->isVisible());
+    splitPanel->setProperty("diaryRequestToolbarSuppressed",true);
+    assert(!toolbar->property("visible").toBool());
+    delete splitPanel;assert(toolbar->property("visible").toBool());delete readingView;
+    root->setProperty("diaryNativePoseObjects",QVariantMap{{"toolbar",QVariant::fromValue(toolbar)},{"zoomButton",QVariant::fromValue(zoomButton)}});
+    std::cout<<"PASS actual QML split-framebuffer reparent, rotated owner and retained toolbar bridge\n";
     moveSession::ToolbarLease destroyedRequest;
     assert(destroyedRequest.acquire(&window).isEmpty());
     panel->setProperty("diaryCaptureSuppressed",true);

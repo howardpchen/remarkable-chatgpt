@@ -1,6 +1,28 @@
 #!/bin/sh
 # Runs ONLY inside a disposable Linux container, with synthetic dependency packages.
 set -eu
+# /test must be a dedicated disposable output mount, never real private state.
+# Require the invoking host identity before creating any root-owned fixtures.
+: "${TASK_UID:?Pass the invoking host UID}"
+: "${TASK_GID:?Pass the invoking host GID}"
+case "$TASK_UID" in ''|*[!0-9]*|0) echo 'Invalid non-root TASK_UID' >&2; exit 1;; esac
+case "$TASK_GID" in ''|*[!0-9]*|0) echo 'Invalid non-root TASK_GID' >&2; exit 1;; esac
+test ! -L /test
+awk '$5 == "/test" { found=1 } END { exit !found }' /proc/self/mountinfo
+hand_back_outputs() {
+    result=$?
+    trap - EXIT HUP INT TERM
+    # Do not dereference symlinks or touch signing/input mounts. Preserve modes.
+    if ! find /test -xdev -user root -exec chown -h "$TASK_UID:$TASK_GID" {} +; then
+        echo 'ERROR: lifecycle output ownership handback failed' >&2
+        result=1
+    fi
+    exit "$result"
+}
+trap hand_back_outputs EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 : "${TEST_APK:?}"
 : "${TEST_UPGRADE_APK:?}"
 : "${TEST_PUBLIC_KEY:?}"

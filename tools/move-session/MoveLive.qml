@@ -16,7 +16,8 @@ Item {
     height: panelExpanded ? 176 : 72
     readonly property string diaryCaptureOwner: "ink-diary-owned-control-v1"
     property bool diaryCaptureSuppressed: false
-    // Reuse the exact lexical bridge; the capture-only Binding below restores
+    property bool diaryRequestToolbarSuppressed: false
+    // Reuse the exact lexical bridge; the scoped Bindings below restore
     // the original native visibility binding/value, not an imperative overwrite.
     // Unknown/missing state must not offer dismissal without a recovery signal.
     readonly property var nativeToolbar: (parent !== null &&
@@ -29,15 +30,32 @@ Item {
     readonly property bool nativeCaptureReady: (nativeToolbar !== null &&
         typeof nativeToolbar.visible === "boolean" && nativeToolbar.visible === false &&
         typeof nativeToolbar.shown === "boolean" && nativeToolbar.shown === false)
+    readonly property bool nativeRequestToolbarReady: (nativeCaptureReady &&
+        typeof nativeToolbar.expanded === "boolean" && nativeToolbar.expanded === false)
     Binding {
         target: moveUiProbe.nativeToolbar
         property: "visible"
         value: false
-        when: moveUiProbe.diaryCaptureSuppressed && moveUiProbe.nativeToolbar !== null
+        when: (moveUiProbe.diaryCaptureSuppressed || moveUiProbe.diaryRequestToolbarSuppressed) && moveUiProbe.nativeToolbar !== null
         restoreMode: Binding.RestoreBindingOrValue
     }
-    // Owner-intended exception: widget destruction need not restore native
-    // visibility. Normal capture lease release still restores the prior state.
+    Binding {
+        target: moveUiProbe.nativeToolbar
+        property: "expanded"
+        value: false
+        when: moveUiProbe.diaryRequestToolbarSuppressed && moveUiProbe.nativeToolbar !== null
+        restoreMode: Binding.RestoreBindingOrValue
+    }
+    Component.onDestruction: {
+        // Restore a request-owned override even if the notebook/widget closes.
+        // Retain the historical capture-only destruction behavior otherwise.
+        if (diaryRequestToolbarSuppressed) {
+            diaryCaptureSuppressed = false;
+            diaryRequestToolbarSuppressed = false;
+        }
+    }
+    // Historical capture-only destruction may leave visibility hidden. A
+    // request-owned override is always released by the destruction handler.
     property bool dismissedUntilToolbar: false
     onToolbarsHiddenChanged: {
         if (!toolbarsHidden) dismissedUntilToolbar = false;

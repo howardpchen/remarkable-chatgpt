@@ -13,6 +13,10 @@
 #define INK_DIARY_EXPERIMENTAL_MOVE
 #include "admission.h"
 #include "../../src/capture-ui.h"
+#ifdef INK_MOVE_PER_REQUEST
+#include "../move-session/toolbar-lease.h"
+#include "../diagnostic/native-pose.h"
+#endif
 #endif
 class FakeBroker : public QObject {
     Q_OBJECT
@@ -193,6 +197,80 @@ int main(int argc,char **argv) {
         assert(toolbar->property("visible").toBool()==!originalVisible); // Binding survives.
     }
     root->setProperty("toolbarVisibleSetting",true);
+#ifdef INK_MOVE_PER_REQUEST
+    // Request lease keeps only the native toolbar hidden while capture leases
+    // may come and go. Use the actual candidate QML, not a fake request flag.
+    panel->setProperty("controlsExpanded",true); // Explicit Start requires the expanded owner boundary.
+    for (bool originalVisible:{false,true}) for (bool originalExpanded:{false,true}) {
+        root->setProperty("toolbarVisibleSetting",originalVisible);
+        toolbar->setProperty("expanded",originalExpanded);
+        moveSession::ToolbarLease request;
+        assert(request.acquire(&window).isEmpty());
+        assert(panel->isVisible() && !toolbar->property("visible").toBool() && !toolbar->property("expanded").toBool());
+        moveSession::ToolbarLease duplicate;
+        assert(!duplicate.acquire(&window).isEmpty());
+        duplicate.release();assert(panel->property("diaryRequestToolbarSuppressed").toBool());
+        int renders=0,failures=0;
+        DiaryCaptureUiSession capture(&window,[&](auto event,const auto &){
+            event==DiaryCaptureUiSession::Event::RenderReady?++renders:++failures;
+        });
+        capture.begin();
+        assert(QTest::qWaitFor([&]{return renders || failures;},1000));
+        assert(renders==1 && failures==0 && capture.readyForCapture());
+        capture.release();
+        assert(panel->isVisible() && !toolbar->property("visible").toBool() && !toolbar->property("expanded").toBool());
+        request.release();request.release();
+        assert(toolbar->property("visible").toBool()==originalVisible);
+        assert(toolbar->property("expanded").toBool()==originalExpanded);
+        root->setProperty("toolbarVisibleSetting",!originalVisible);
+        assert(toolbar->property("visible").toBool()==!originalVisible);
+    }
+    root->setProperty("toolbarVisibleSetting",true);toolbar->setProperty("expanded",true);
+    {
+        moveSession::ToolbarLease teardown;
+        assert(teardown.acquire(&window).isEmpty());
+        root->setProperty("toolbarVisibleSetting",false);
+    }
+    assert(!toolbar->property("visible").toBool() && toolbar->property("expanded").toBool());
+    root->setProperty("toolbarVisibleSetting",true);
+    assert(toolbar->property("visible").toBool());
+    root->setProperty("diaryNativePoseObjects",QVariantMap{});
+    {
+        moveSession::ToolbarLease unavailable;
+        assert(!unavailable.acquire(&window).isEmpty());
+        assert(!panel->property("diaryRequestToolbarSuppressed").toBool());
+    }
+    root->setProperty("diaryNativePoseObjects",QVariantMap{{"toolbar",QVariant::fromValue(toolbar)}});
+    {
+        // Exercise the real numeric pose collector with a synthetic complete
+        // native bridge. The hidden pose must match exactly, not a whitelist
+        // with toolbar fields deleted or an arbitrary live pose blessed at Start.
+        auto *stub=new QQuickItem(root);stub->setVisible(false);
+        QVariantMap bridge{{"toolbar",QVariant::fromValue(toolbar)}};
+        for(const auto &id:diagnostic::nativePose(root).value("missing").toArray())
+            bridge.insert(id.toString(),QVariant::fromValue<QObject *>(stub));
+        root->setProperty("diaryNativePoseObjects",bridge);
+        toolbar->setProperty("expanded",false);
+        panel->setProperty("diaryCaptureSuppressed",true);
+        const auto reviewedHidden=diagnostic::nativePose(root);
+        assert(reviewedHidden.value("ok").toBool());
+        panel->setProperty("diaryCaptureSuppressed",false);
+        toolbar->setProperty("expanded",true);
+        const auto shownPose=diagnostic::nativePose(root);assert(shownPose!=reviewedHidden);
+        moveSession::ToolbarLease request;assert(request.acquire(&window).isEmpty());
+        assert(diagnostic::nativePose(root)==reviewedHidden);
+        auto *overlay=new QQuickItem(root);overlay->setSize({10,10});
+        assert(diagnostic::nativePose(root)!=reviewedHidden); // Guard still rejects overlays.
+        delete overlay;
+        panel->setProperty("diaryCaptureSuppressed",true);
+        assert(diagnostic::nativePose(root)==reviewedHidden);
+        panel->setProperty("diaryCaptureSuppressed",false);
+        request.release();assert(diagnostic::nativePose(root)==shownPose);
+        root->setProperty("diaryNativePoseObjects",QVariantMap{{"toolbar",QVariant::fromValue(toolbar)}});
+        delete stub;
+    }
+    std::cout<<"PASS: request-scoped native toolbar hiding, capture nesting, exact prior-state/binding restoration, exclusive ownership, unavailable bridge refusal\n";
+#endif
     {
         DiaryCaptureUiSession cancelled(&window,[](auto,const auto &){});
         cancelled.begin(); assert(!toolbar->property("visible").toBool());
@@ -232,11 +310,26 @@ int main(int argc,char **argv) {
 #ifdef INK_MOVE_LIVE_TEST
     root->setProperty("diaryNativePoseObjects",QVariantMap{{"toolbar",QVariant::fromValue(toolbar)}});
     root->setProperty("toolbarVisibleSetting",true);
+#ifdef INK_MOVE_PER_REQUEST
+    root->setProperty("documentLoaded",true);
+    panel->setProperty("controlsExpanded",true);
+    toolbar->setProperty("expanded",true);
+    moveSession::ToolbarLease destroyedRequest;
+    assert(destroyedRequest.acquire(&window).isEmpty());
+    panel->setProperty("diaryCaptureSuppressed",true);
+    delete panel; // Notebook/widget teardown must release request overrides too.
+    destroyedRequest.release();
+    assert(toolbar->property("visible").toBool() && toolbar->property("expanded").toBool());
+    root->setProperty("toolbarVisibleSetting",false);assert(!toolbar->property("visible").toBool());
+    root->setProperty("toolbarVisibleSetting",true);assert(toolbar->property("visible").toBool());
+    std::cout<<"PASS: destroying request-suppressed widget restores native toolbar and bindings even during capture\n";
+#else
     panel->setProperty("diaryCaptureSuppressed",true);
     assert(!toolbar->property("visible").toBool());
     delete panel;
     assert(!toolbar->property("visible").toBool()); // Owner-intended destruction exception.
     std::cout<<"PASS: destroying suppressed live widget may intentionally leave native toolbar hidden\n";
+#endif
     delete root;
 #else
     delete panel;delete root;

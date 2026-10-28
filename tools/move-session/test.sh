@@ -22,7 +22,7 @@ c++ -std=c++17 -fPIC -DINK_MOVE_PER_REQUEST tools/move-session/test-page-profile
 "$out/test-page-profile"
 c++ -std=c++17 -fPIC tools/move-session/test-template-ink.cpp -o "$out/test-template-ink" $(pkg-config --cflags --libs Qt6Gui Qt6Core)
 "$out/test-template-ink"
-for scenario in old-reference missing-profile public-profile zoomed-before-start template-before-start translated-before-start dots-before-start grid-before-start grid-table-before-start dots-change-api dots-empty grid-empty success cancel cancel-hidden page-change template-change zoom-change native-pose-change changed-pixels same-page-ink capture-timeout overall-timeout malformed unsupported needs-web clarification unknown-kind too-large http-error api-timeout cancel-api page-change-api template-change-api zoom-change-api shutdown-api teardown-api teardown-hidden; do
+for scenario in old-reference missing-profile public-profile toolbar-unavailable toolbar-already-held zoomed-before-start template-before-start translated-before-start dots-before-start grid-before-start grid-table-before-start dots-change-api dots-empty grid-empty success cancel cancel-hidden page-change template-change zoom-change native-pose-change changed-pixels same-page-ink capture-timeout overall-timeout malformed unsupported needs-web clarification unknown-kind too-large http-error api-timeout cancel-api page-change-api template-change-api zoom-change-api shutdown-api teardown-api teardown-hidden; do
     test_dir=$(mktemp -d "$out/run.XXXXXX")
     INK_WORKFLOW_TEST_DIR="$test_dir" QT_QPA_PLATFORM=offscreen QSG_RHI_BACKEND=software "$out/test-runtime" "$scenario"
 done

@@ -60,7 +60,7 @@ int main(int argc,char **argv) {
     QQmlEngine engine; QQuickWindow window;
     window.resize(954,1696);
     QQmlComponent rootComponent(&engine);
-    rootComponent.setData("import QtQuick 2.15\nItem { width:954; height:1696; property bool documentLoaded:true; property QtObject document; property QtObject sceneController; property int currentPage:0; property string currentPageId:'synthetic-page' }",QUrl());
+    rootComponent.setData("import QtQuick 2.15\nItem { width:954; height:1696; property bool documentLoaded:true; property QtObject document; property QtObject sceneController; property int currentPage:0; property string currentPageId:'synthetic-page'; property alias testToolbar:bar; Item { id:bar; visible:true; property bool expanded:true } }",QUrl());
     auto *root=qobject_cast<QQuickItem *>(rootComponent.create()); assert(root);
     root->setParentItem(window.contentItem());
     MockDocument document; MockController controller; MockView view;
@@ -70,8 +70,12 @@ int main(int argc,char **argv) {
     view.setProperty("controller",QVariant::fromValue<QObject *>(&controller));
     QQmlEngine::setContextForObject(&view,engine.rootContext());
     QQmlComponent panelComponent(&engine);
-    panelComponent.setData("import QtQuick 2.15\nRectangle { objectName:'moveUiProbe'; width:360; height:176; x:578; y:1504; readonly property string diaryCaptureOwner:'ink-diary-owned-control-v1'; property bool diaryCaptureSuppressed:false; visible:!diaryCaptureSuppressed; color:'white' }",QUrl());
+    panelComponent.setData("import QtQuick 2.15\nRectangle { id:panel; objectName:'moveUiProbe'; width:360; height:176; x:578; y:1504; readonly property string diaryCaptureOwner:'ink-diary-owned-control-v1'; property bool diaryCaptureSuppressed:false; visible:!diaryCaptureSuppressed; color:'white'; "
+        "property bool requestBridgeAvailable:true; property bool diaryRequestToolbarSuppressed:false; readonly property bool nativeRequestToolbarReady: requestBridgeAvailable && parent && !parent.testToolbar.visible && !parent.testToolbar.expanded; "
+        "Binding { target:panel.parent ? panel.parent.testToolbar : null; property:'visible'; value:false; when:panel.diaryRequestToolbarSuppressed; restoreMode:Binding.RestoreBindingOrValue } "
+        "Binding { target:panel.parent ? panel.parent.testToolbar : null; property:'expanded'; value:false; when:panel.diaryRequestToolbarSuppressed; restoreMode:Binding.RestoreBindingOrValue } }",QUrl());
     auto *panel=qobject_cast<QQuickItem *>(panelComponent.create()); assert(panel); panel->setParentItem(root);
+    auto *toolbar=root->property("testToolbar").value<QObject *>();assert(toolbar);
     window.show(); assert(QTest::qWaitFor([&]{return window.isExposed();}));
     const auto page=workflow::current(); assert(page.view==&view && page.document==root);
     const auto vp=moveDemo::viewport(page); assert(!vp.isEmpty());
@@ -130,6 +134,10 @@ int main(int argc,char **argv) {
     if(scenario=="shutdown-api" || scenario=="teardown-api" || scenario=="api-timeout" || scenario=="cancel-api" || scenario=="page-change-api" || scenario=="template-change-api" || scenario=="zoom-change-api" || scenario=="dots-change-api")manager.delay=-1;
     manager.onDispatch=[&]{
         assert(panel->isVisible()); // Own UI restored throughout API wait.
+#ifdef INK_MOVE_PER_REQUEST
+        assert(panel->property("diaryRequestToolbarSuppressed").toBool());
+        assert(!toolbar->property("visible").toBool() && !toolbar->property("expanded").toBool());
+#endif
         if(scenario=="dots-change-api")QTimer::singleShot(10,&app,[&]{document.name="P Grid small";});
         if(scenario=="same-page-ink")image.setPixelColor(450,80,Qt::black);
         const auto body=QJsonDocument::fromJson(manager.sent).object();
@@ -154,7 +162,13 @@ int main(int argc,char **argv) {
     moveDemo::runtime=&runtime;
     moveDemo::RuntimeTest::live(runtime,&manager);
 #endif
-    moveDemo::RuntimeTest::setup(runtime,[&] {++nativeChecks;return scenario=="native-pose-change" && nativeChecks>1?QString("native-ui-pose-changed"):QString();});
+    moveDemo::RuntimeTest::setup(runtime,[&] {
+        ++nativeChecks;
+#ifdef INK_MOVE_PER_REQUEST
+        assert(!toolbar->property("visible").toBool() && !toolbar->property("expanded").toBool());
+#endif
+        return scenario=="native-pose-change" && nativeChecks>1?QString("native-ui-pose-changed"):QString();
+    });
     if (scenario=="overall-timeout") moveDemo::RuntimeTest::timeout(runtime);
 #ifdef INK_MOVE_LIVE_TEST
     if(scenario=="old-reference") {
@@ -167,6 +181,19 @@ int main(int argc,char **argv) {
     }
 #endif
 #ifdef INK_MOVE_PER_REQUEST
+    if(scenario=="toolbar-unavailable" || scenario=="toolbar-already-held") {
+        if(scenario=="toolbar-unavailable")panel->setProperty("requestBridgeAvailable",false);
+        else panel->setProperty("diaryRequestToolbarSuppressed",true);
+        runtime.start();
+        assert(!runtime.status()["busy"].toBool() && manager.requests==0 && captures==0 && controller.calls==0);
+        assert(moveSession::remaining(workflow::sessionRoot)==initialAllowance);
+        assert(!QFile::exists(workflow::sessionRoot+"/1"));
+        assert(panel->property("diaryRequestToolbarSuppressed").toBool()==(scenario=="toolbar-already-held"));
+        panel->setProperty("diaryRequestToolbarSuppressed",false);
+        assert(toolbar->property("visible").toBool() && toolbar->property("expanded").toBool());
+        std::cout<<"PASS toolbar refusal before allocation, no stolen lease: "<<scenario.toStdString()<<"\n";
+        delete panel;view.setParentItem(nullptr);delete root;return 0;
+    }
     if(scenario=="missing-profile" || scenario=="public-profile" || scenario=="zoomed-before-start" || scenario=="template-before-start") {
         if(scenario=="missing-profile")assert(reference.remove());
         if(scenario=="public-profile")assert(reference.setPermissions(QFileDevice::ReadOwner|QFileDevice::WriteOwner|QFileDevice::ReadOther));
@@ -216,6 +243,10 @@ int main(int argc,char **argv) {
     if(scenario=="teardown-api" || scenario=="teardown-hidden") {
         assert(QTest::qWaitFor([&]{return scenario=="teardown-api"?manager.requests==1:!panel->isVisible();},3000));
         runtimeOwner.reset();QTest::qWait(300);
+#ifdef INK_MOVE_PER_REQUEST
+        assert(!panel->property("diaryRequestToolbarSuppressed").toBool());
+        assert(toolbar->property("visible").toBool() && toolbar->property("expanded").toBool());
+#endif
         assert(controller.calls==0 && panel->isVisible() && !panel->property("diaryCaptureSuppressed").toBool());
         assert(manager.requests==(scenario=="teardown-api"?1:0));
         assert(manager.aborts==(scenario=="teardown-api"?1:0));
@@ -245,6 +276,10 @@ int main(int argc,char **argv) {
         cancelTimer.start(); assert(QTest::qWaitFor([&]{return !runtime.status()["busy"].toBool();},6000));
     } else assert(QTest::qWaitFor([&]{return !runtime.status()["busy"].toBool();},6000));
     assert(panel->isVisible() && !panel->property("diaryCaptureSuppressed").toBool());
+#ifdef INK_MOVE_PER_REQUEST
+    assert(!panel->property("diaryRequestToolbarSuppressed").toBool());
+    assert(toolbar->property("visible").toBool() && toolbar->property("expanded").toBool());
+#endif
     assert(!captureVisible);
 #ifdef INK_MOVE_SINGLE_CAPTURE
     assert(captures<=1 && !QFile::exists(workflow::base+"/check.png"));

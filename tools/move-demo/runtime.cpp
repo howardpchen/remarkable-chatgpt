@@ -9,6 +9,7 @@
 #ifdef INK_MOVE_PER_REQUEST
 #include "../move-session/quota.h"
 #include "../move-session/page-profile.h"
+#include "../move-session/toolbar-lease.h"
 #include "../remarkable-ai/provider-status.h"
 #include <QDebug>
 #endif
@@ -27,6 +28,9 @@ inline QJsonObject viewport(const workflow::Page &page) {
 class LivePose final : public NativePoseSource {
 public:
     QJsonObject reference;
+#ifdef INK_MOVE_PER_REQUEST
+    bool requestToolbarHidden=false;
+#endif
 #ifdef INK_MOVE_DEMO_HOST_TEST
     std::function<QString()> testVerify;
 #endif
@@ -42,7 +46,11 @@ public:
         const auto pose=diagnostic::nativePose(doc);
         if (!pose.value("ok").toBool() || pose!=reference.value(
 #ifdef INK_MOVE_LIVE_TEST
-            suppressed?"hiddenNativePose":"nativePose"
+            (suppressed
+#ifdef INK_MOVE_PER_REQUEST
+             || requestToolbarHidden
+#endif
+            )?"hiddenNativePose":"nativePose"
 #else
             "nativePose"
 #endif
@@ -105,6 +113,9 @@ public:
         if(client_) client_->cancel();
 #endif
         if (lease_) lease_->release();
+#ifdef INK_MOVE_PER_REQUEST
+        toolbarLease_.reset();
+#endif
 #ifdef INK_MOVE_PER_REQUEST
         qInfo("ink-move lifecycle destructor-body-end");
 #endif
@@ -179,6 +190,13 @@ public:
 #endif
 #endif // The one-shot build retains its old per-page reference contract.
 #ifdef INK_MOVE_PER_REQUEST
+        // Hide before exact native-pose admission, not just at screenshot time.
+        // This compares against the reviewed hidden pose throughout the request;
+        // no alternate visible pose is synthesized or accepted from live state.
+        toolbarLease_=std::make_unique<moveSession::ToolbarLease>();
+        const auto toolbarError=toolbarLease_->acquire(p.window);
+        if (!toolbarError.isEmpty()) {stop(toolbarError);return;}
+        native_.requestToolbarHidden=true;
         const auto requestDir=moveSession::reserve(workflow::sessionRoot);
         if(requestDir.isEmpty()) {stop("Request budget/quota exhausted or unavailable");return;}
         workflow::base=requestDir;
@@ -225,6 +243,9 @@ private:
 #endif
         timer_.stop(); busy_=false; stage_=Stage::Terminal; message_=reason;
         if (lease_) {lease_->release();lease_->deleteLater();lease_.clear();}
+#ifdef INK_MOVE_PER_REQUEST
+        toolbarLease_.reset(); native_.requestToolbarHidden=false;
+#endif
         if (admission_ && admission_->phase()==Admission::Phase::Started) admission_->cancel();
     }
     bool boundary() {
@@ -364,6 +385,9 @@ private:
         30000;
 #endif
     QPointer<DiaryCaptureUiSession> lease_;
+#ifdef INK_MOVE_PER_REQUEST
+    std::unique_ptr<moveSession::ToolbarLease> toolbarLease_;
+#endif
     LivePose native_; std::unique_ptr<Admission> admission_;
     Stage stage_=Stage::Idle; bool busy_=false,started_=false,ready_=false,captureSecond_=false;
     QString message_=

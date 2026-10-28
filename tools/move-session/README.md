@@ -200,6 +200,14 @@ The test suite switches pages and scene origins across three Starts using one
 byte-identical profile and confirms no `reviewed-reference.json` is needed.
 No screenshot/calibration upload or JSON file edit is required between questions.
 
+The local request-scoped toolbar revision hides the native toolbar before pose
+admission and keeps it hidden through inference/insertion, restoring its prior
+visibility/expanded bindings on every terminal path. The AI panel remains
+available for Cancel except during the screenshot lease. All native checks use
+the exact reviewed hidden pose, not a relaxed visible-toolbar profile. See
+[`MOVE-TOOLBAR-AUTOHIDE.md`](../../docs/MOVE-TOOLBAR-AUTOHIDE.md) for verification,
+the focused installed-baseline candidate and separate deployment authority.
+
 The ordinary one-shot live and offline artifacts retain their prior reference
 contracts. Only the per-request QML replaces “not armed” with setup/test-limit
 status; it still never Starts automatically. The single-capture trial remains

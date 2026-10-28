@@ -4,6 +4,7 @@ Start with `docs/PROJECT.md` (scope and decisions), `docs/PROJECT-STATUS.md`
 (current checkpoint), and `docs/ROADMAP.md` (work remaining). For the Move Grid
 placement regression, also read `docs/MOVE-GRID-FIT.md`. Update the status
 checkpoint after meaningful work so a fresh session can resume without chat history.
+For request-scoped native toolbar hiding, read `docs/MOVE-TOOLBAR-AUTOHIDE.md`.
 
 ## Boundaries
 

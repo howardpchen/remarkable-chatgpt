@@ -1,5 +1,15 @@
 # Current project checkpoint
 
+## Move toolbar auto-hide (local; not deployed)
+
+Owner-requested toolbar hiding through inference and prior-state restoration is
+implemented locally. Both focused capture-mode suites pass 40 request scenarios;
+actual-widget/strict-pose checks, inherited live tests and exact Move SDK build
+pass. No device change or provider request occurred. Focused SO/QMD/profile
+artifacts and next deployment checks are in [Move toolbar auto-hide](MOVE-TOOLBAR-AUTOHIDE.md).
+The installed Move still has the Grid-only fix; this update requires fresh
+deployment authority. Unrelated Paper Pro work below is preserved.
+
 Updated: 2026-10-27. OpenClaw registered project: **reMarkable AI — Vellum Mod**
 (`remarkable-ai-vellum-mod`). Select it in **New session → Folder/Place** to resume.
 Registration reuses this repository and does not move files, publish changes or

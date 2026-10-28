@@ -74,7 +74,7 @@ int main(int argc,char **argv) {
     assert(!dismiss->isVisible() && collapse->isVisible());
 #ifdef INK_MOVE_PER_REQUEST
     auto *idleTimer=panel->findChild<QObject *>("moveUiIdleCollapse");assert(idleTimer);
-    assert(idleTimer->property("interval").toInt()==10000);
+    assert(idleTimer->property("interval").toInt()==3000);
     // Exercise the production timer with shortened test-only duration.
     idleTimer->setProperty("interval",150);
     assert(QTest::qWaitFor([&]{return launcher->isVisible();},1000));
@@ -87,10 +87,10 @@ int main(int argc,char **argv) {
     assert(!launcher->isVisible() && !idleTimer->property("running").toBool());
     FakeBroker::busy=false;panel->setProperty("demoBusy",false);
     assert(QTest::qWaitFor([&]{return launcher->isVisible();},1000));
-    idleTimer->setProperty("interval",10000);clickItem(launcher);
+    idleTimer->setProperty("interval",3000);clickItem(launcher);
     auto *statusText=panel->findChild<QQuickItem *>("moveUiProbeStatus");assert(statusText);
     auto *card=panel->findChild<QQuickItem *>("moveUiProbeCard");assert(card);
-    auto *budgetText=panel->findChild<QQuickItem *>("moveUiBudgetDetail");assert(budgetText);
+    assert(!panel->findChild<QQuickItem *>("moveUiBudgetDetail"));
     auto snapshot=[&](const QString &name) {
         const auto destination=qEnvironmentVariable("INK_MOVE_UI_PREVIEW_DIR");
         if(destination.isEmpty()) return;
@@ -103,7 +103,6 @@ int main(int argc,char **argv) {
     panel->setProperty("localMessage","Ready");QCoreApplication::processEvents();
     assert(card->mapRectToScene(card->boundingRect())==QRectF(658,1528,280,152));
     assert(statusText->property("contentWidth").toReal()<=statusText->width());
-    assert(budgetText->property("contentWidth").toReal()<=budgetText->width());
     snapshot("expanded");
     root->setProperty("toolbarVisibleSetting",false);QCoreApplication::processEvents();
     assert(statusText->property("contentWidth").toReal()<=statusText->width());
@@ -124,9 +123,9 @@ int main(int argc,char **argv) {
     panel->setProperty("budgetAvailable",5.0);
     panel->setProperty("localMessage","Normal zoom: Blank, Dots small or Grid small");
     QCoreApplication::processEvents();
-    assert(statusText->property("text").toString()=="AI · left $5.00");
+    assert(statusText->property("text").toString()=="AI: 5.00");
     panel->setProperty("localMessage","Live text inserted (single capture); verify placement and Undo/Redo");
-    QCoreApplication::processEvents();assert(statusText->property("text").toString()=="Done · left $5.00");
+    QCoreApplication::processEvents();assert(statusText->property("text").toString()=="AI: 5.00");
     snapshot("completed");
     panel->setProperty("demoArmed",false); // Restore the synthetic idle broker state after previews.
     panel->setProperty("dollarBudget",false);

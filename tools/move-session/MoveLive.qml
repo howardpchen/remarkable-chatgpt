@@ -20,7 +20,7 @@ Item {
     Timer {
         id: idleCollapse
         objectName: "moveUiIdleCollapse"
-        interval: 10000
+        interval: 3000
         repeat: false
         onTriggered: {
             if (!moveUiProbe.demoBusy) moveUiProbe.controlsExpanded = false;
@@ -96,13 +96,13 @@ Item {
     property string localMessage: "Text · checking budget"
 
     function statusLabel() {
-        var budget = dollarBudget ? " · left $" + budgetAvailable.toFixed(2) : "";
-        if (localMessage.indexOf("inserted") >= 0) return "Done" + budget;
+        var label = dollarBudget ? "AI: " + budgetAvailable.toFixed(2) : "AI";
+        if (localMessage.indexOf("inserted") >= 0) return label;
         if (localMessage.indexOf("Thinking") === 0) return "Thinking…";
         if (localMessage.indexOf("Live text test") === 0) return "Reading page…";
-        if (localMessage.indexOf("Cancelled;") === 0) return "Cancelled" + budget;
+        if (localMessage.indexOf("Cancelled;") === 0) return label;
         if (localMessage.indexOf("Ready") === 0 || localMessage.indexOf("Text · checking") === 0 || localMessage.indexOf("Normal zoom:") === 0)
-            return "AI" + budget;
+            return label;
         return localMessage; // Preserve actionable errors and unsupported notices.
     }
 
@@ -246,21 +246,6 @@ Item {
             font.pixelSize: 22
             wrapMode: Text.WordWrap
             text: moveUiProbe.statusLabel()
-            color: "black"
-        }
-
-        Text {
-            objectName: "moveUiBudgetDetail"
-            visible: moveUiProbe.panelExpanded && moveUiProbe.dollarBudget
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.bottom: probeButton.top
-            anchors.leftMargin: 12
-            anchors.rightMargin: 12
-            anchors.bottomMargin: 3
-            font.pixelSize: 14
-            text: "Guard $" + moveUiProbe.budgetSettledGuard.toFixed(4) +
-                  " · held $" + moveUiProbe.budgetHeld.toFixed(2) + " (not billing)"
             color: "black"
         }
 

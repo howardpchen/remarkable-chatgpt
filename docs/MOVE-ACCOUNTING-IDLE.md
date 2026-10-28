@@ -1,11 +1,13 @@
-# Move accounting and 10-second idle collapse
+# Move accounting and idle collapse
 
 ## Scope / local candidate (2026-10-27)
 
 Owner requested the accounting correction and automatic widget collapse after
-10 seconds idle. Implementation/testing only; this is not device deployment,
-provider verification, a ledger reset or Vellum migration. See PROJECT-STATUS.md
-for the installed build. Preserve the existing $5 policy and all attempt history.
+10 seconds idle, later shortened to 3 seconds at the owner's request. The focused tested build was subsequently installed with scoped
+owner approval, and seven freshly verified unsent holds reconciled offline.
+See PROJECT-STATUS.md for live evidence and limits. This was not provider
+verification, a ledger reset or Vellum migration. Preserve the existing $5 policy
+and all attempt history.
 
 ## Accounting
 
@@ -25,8 +27,9 @@ for the installed build. Preserve the existing $5 policy and all attempt history
   bounded cached-input count and conservative pricing provenance in
   `BUDGET_USAGE.json`. No notebook/answer text, key or raw response is saved.
 - The existing padded reservation and settlement rates remain the spending
-  **guard**, not invoice pricing. The UI labels available local allowance,
-  settled guard charges and held reservations separately, explicitly not billing.
+  **guard**, not invoice pricing. The simplified widget shows only available
+  local allowance as `AI: X.XX`; detailed settled guard charges and held
+  reservations remain available through the CLI.
   CLI adds settled guard and released-attempt counts while retaining its old
   combined field for compatibility. Historical invoices cannot be reconstructed
   from the old derived-cost-only records; no actual billing estimate is invented.
@@ -56,7 +59,7 @@ than the provider dashboard does not authorize filling the ledger to that total.
 
 ## Widget idle behavior
 
-The expanded idle panel collapses to its existing AI launcher after 10 seconds.
+The expanded idle panel collapses to its existing AI launcher after 3 seconds.
 Opening, finishing a request and releasing input start a fresh interval; held
 input pauses it. Status polling is not user activity. Busy requests stay expanded
 with Cancel reachable, and capture suppression takes precedence. It never

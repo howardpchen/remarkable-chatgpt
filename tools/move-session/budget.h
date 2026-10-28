@@ -14,7 +14,7 @@ namespace moveSession {
 inline constexpr qint64 budgetTotal=5000000000LL; // integer nano-USD
 inline constexpr qint64 inputRate=275, outputRate=825;
 inline constexpr qint64 budgetReservation=922000LL*inputRate+800LL*outputRate;
-struct BudgetState { bool ok=false; qint64 available=0, charged=0, unsettledReserved=0; int attempts=0, unsettledAttempts=0, next=0; };
+struct BudgetState { bool ok=false; qint64 available=0, charged=0, settled=0, unsettledReserved=0; int attempts=0, unsettledAttempts=0, releasedAttempts=0, next=0; };
 inline bool budgetInteger(QJsonValue v,qint64 maximum,qint64 &out) {
     const double n=v.toDouble(-1);
     if(!v.isDouble() || !std::isfinite(n) || n<0 || n>double(maximum) || std::floor(n)!=n)return false;
@@ -30,6 +30,17 @@ inline QByteArray budgetRead(int parent,const QByteArray &name) {
         if(n==st.st_size)result=QByteArray(data,int(n));
     }
     ::close(fd);return result;
+}
+inline bool budgetAbsent(int fd,const char *name) {
+    struct stat st{};
+    return ::fstatat(fd,name,&st,AT_SYMLINK_NOFOLLOW)!=0 && errno==ENOENT;
+}
+inline bool budgetWrite(int fd,const char *name,const QByteArray &data) {
+    const int out=::openat(fd,name,O_WRONLY|O_CREAT|O_EXCL|O_NOFOLLOW|O_CLOEXEC,0600);
+    if(out<0)return false;
+    const bool saved=::write(out,data.constData(),size_t(data.size()))==data.size() && ::fsync(out)==0;
+    ::close(out);
+    return saved && ::fsync(fd)==0;
 }
 // Caller holds an exclusive flock on the private root for scan/reserve/settle.
 inline BudgetState budgetScan(int fd) {
@@ -71,9 +82,17 @@ inline BudgetState budgetScan(int fd) {
             if(converted && n>=0 && n<=budgetReservation && raw==QByteArray::number(n)+'\n')charge=n;
             else valid=false;
         }
+        const auto released=budgetRead(request,"BUDGET_RELEASE");
+        const bool releaseExists=!budgetAbsent(request,"BUDGET_RELEASE");
+        if(releaseExists) {
+            if((released!="local-undispatched-v1\n" && released!="legacy-no-start-v1\n") ||
+               !budgetAbsent(request,"BUDGET_COST") || !budgetAbsent(request,"BUDGET_DISPATCH"))valid=false;
+            else {charge=0;++state.releasedAttempts;}
+        }
         ::close(request);
         ++state.attempts;
-        if(raw.isEmpty()) {++state.unsettledAttempts;state.unsettledReserved+=charge;}
+        if(raw.isEmpty() && !releaseExists) {++state.unsettledAttempts;state.unsettledReserved+=charge;}
+        else if(!releaseExists)state.settled+=charge;
         spent+=charge;
         if(!valid || spent>total){valid=false;break;}
     }
@@ -94,10 +113,41 @@ inline QString budgetReserve(const QString &root) {
         const auto state=budgetScan(fd);
         if(state.ok && state.available>=budgetReservation && state.next<1000000) {
             const auto name=QByteArray::number(state.next);
-            if(::mkdirat(fd,name.constData(),0700)==0 && ::fsync(fd)==0)result=root+"/"+QString::fromLatin1(name);
+            if(::mkdirat(fd,name.constData(),0700)==0 && ::fsync(fd)==0) {
+                const int req=::openat(fd,name.constData(),O_RDONLY|O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC);
+                if(req>=0) {
+                    if(budgetWrite(req,"BUDGET_LOCAL","local-v1\n"))result=root+"/"+QString::fromLatin1(name);
+                    ::close(req);
+                }
+            }
         }
     }
     ::close(fd);return result;
+}
+// All dispatch/release transitions share the reservation lock. The legacy mode
+// is explicit, offline-only reconciliation of reviewed pre-upgrade records.
+inline bool budgetTransition(const QString &root,const QString &path,bool dispatch,bool legacy=false,bool apply=true) {
+    if(!path.startsWith(root+"/"))return false;
+    const auto name=path.mid(root.size()+1).toLatin1();bool parsed=false;
+    const int id=name.toInt(&parsed);
+    if(!parsed || id<1 || name!=QByteArray::number(id))return false;
+    const int fd=openRoot(root);if(fd<0)return false;
+    bool ok=false;
+    if(::flock(fd,LOCK_EX)==0 && budgetScan(fd).ok) {
+        const auto policy=QJsonDocument::fromJson(budgetRead(fd,"budget-policy.json")).object();
+        const int req=id>=policy.value("firstRequestId").toInt() ?
+            ::openat(fd,name.constData(),O_RDONLY|O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC) : -1;
+        if(req>=0) {
+            if(budgetAbsent(req,"BUDGET_COST") && budgetAbsent(req,"BUDGET_RELEASE") && budgetAbsent(req,"BUDGET_DISPATCH")) {
+                const bool local=budgetRead(req,"BUDGET_LOCAL")=="local-v1\n";
+                if(dispatch && local)ok=budgetWrite(req,"BUDGET_DISPATCH","dispatch-uncertain-v1\n");
+                else if(!dispatch && (local || (legacy && budgetAbsent(req,"BUDGET_LOCAL") && budgetAbsent(req,"START_CONSUMED"))))
+                    ok=!apply || budgetWrite(req,"BUDGET_RELEASE",local?"local-undispatched-v1\n":"legacy-no-start-v1\n");
+            }
+            ::close(req);
+        }
+    }
+    ::close(fd);return ok;
 }
 inline void budgetSettle(const QString &root,const QString &requestPath,const QJsonObject &response) {
     // No estimate-based refund: require bounded, integral provider usage and
@@ -119,7 +169,20 @@ inline void budgetSettle(const QString &root,const QString &requestPath,const QJ
         const auto policy=QJsonDocument::fromJson(budgetRead(fd,"budget-policy.json")).object();
         if(state.ok && id>=policy.value("firstRequestId").toInt() && id<state.next) {
             const int req=::openat(fd,name.constData(),O_RDONLY|O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC);
-            if(req>=0) {
+            if(req>=0 && budgetAbsent(req,"BUDGET_RELEASE")) {
+                const auto cachedValue=usage.value("input_tokens_details").toObject().value("cached_tokens");
+                qint64 cached=0;
+                QJsonObject audit{{"schema",1},{"model","gpt-6-luna"},{"serviceTier",tier},
+                    {"inputTokens",double(input)},{"outputTokens",double(output)},
+                    {"totalTokens",double(total)},{"accounting","conservative-guard-not-invoice"},
+                    {"inputNanoUsdPerToken",double(inputRate)},{"outputNanoUsdPerToken",double(outputRate)},
+                    {"pricingSource","budget.h conservative guard policy 2026-10-27"}};
+                if(budgetInteger(cachedValue,input,cached))audit.insert("cachedInputTokens",double(cached));
+                // Preserve first settlement metadata; duplicate settlements never overwrite.
+                if(budgetAbsent(req,"BUDGET_COST") && budgetAbsent(req,"BUDGET_USAGE.json") &&
+                   !budgetWrite(req,"BUDGET_USAGE.json",QJsonDocument(audit).toJson(QJsonDocument::Compact))) {
+                    ::close(req);::close(fd);return;
+                }
                 const int cost=::openat(req,"BUDGET_COST",O_WRONLY|O_CREAT|O_EXCL|O_NOFOLLOW|O_CLOEXEC,0600);
                 if(cost>=0) {
                     const auto data=QByteArray::number(input*inputRate+output*outputRate)+'\n';
@@ -129,8 +192,8 @@ inline void budgetSettle(const QString &root,const QString &requestPath,const QJ
                     if(!saved)::unlinkat(req,"BUDGET_COST",0); // Restore conservative reservation.
                     ::fsync(req);
                 }
-                ::close(req);
             }
+            if(req>=0)::close(req);
         }
     }
     ::close(fd);

@@ -32,6 +32,8 @@ QJsonObject status(const QString &configPath,const QString &root) {
             allowance.insert("totalUsd",double(moveSession::budgetTotal)/1e9);
             allowance.insert("availableUsd",double(budget.available)/1e9);
             allowance.insert("chargedIncludingReservationsUsd",double(budget.charged)/1e9);
+            allowance.insert("settledGuardUsd",double(budget.settled)/1e9);
+            allowance.insert("releasedAttempts",budget.releasedAttempts);
             allowance.insert("unsettledReservedUsd",double(budget.unsettledReserved)/1e9);
             allowance.insert("unsettledAttempts",budget.unsettledAttempts);
             allowance.insert("attempts",budget.attempts);
@@ -81,7 +83,7 @@ void print(const QJsonObject &value,bool json) {
     if(budget.contains("availableUsd")) {
         stream.setRealNumberNotation(QTextStream::FixedNotation);stream.setRealNumberPrecision(6);
         stream<<"  Available $"<<budget.value("availableUsd").toDouble()<<" / $"<<budget.value("totalUsd").toDouble()
-          <<"; charged incl. reservations $"<<budget.value("chargedIncludingReservationsUsd").toDouble()
+          <<"; settled conservative guard (not invoice) $"<<budget.value("settledGuardUsd").toDouble()
           <<"\n  Unsettled/reserved $"<<budget.value("unsettledReservedUsd").toDouble()
           <<"; next attempt reserves $"<<budget.value("nextRequestReservationUsd").toDouble()
           <<"\n  Next request affordable: "<<(budget.value("canAffordNextRequest").toBool()?"yes":"no")<<"; no separate request-count cap\n";
@@ -96,7 +98,27 @@ int main(int argc,char **argv) {
     QCoreApplication app(argc,argv);auto args=app.arguments();
     rlimit noCore{0,0};::setrlimit(RLIMIT_CORE,&noCore);::umask(077);
     if(args.size()==2 && (args[1]=="--help" || args[1]=="help")) {
-        std::cout<<"remarkable-ai key status [--json] [--config PATH] [--state-dir PATH]\nremarkable-ai key set|remove [--config PATH]\nStatus is local-only; key changes never refill the allowance.\n";return 0;
+        std::cout<<"remarkable-ai key status [--json] [--config PATH] [--state-dir PATH]\nremarkable-ai key set|remove [--config PATH]\nremarkable-ai budget reconcile-unsent --state-dir PATH --request-id ID [--request-id ID ...] [--apply --runtime-stopped]\nStatus is local-only; key changes never refill the allowance.\n";return 0;
+    }
+    if(args.size()>=3 && args[1]=="budget" && args[2]=="reconcile-unsent") {
+        QString state;QStringList ids;bool apply=false,stopped=false;
+        for(int i=3;i<args.size();++i) {
+            if(args[i]=="--state-dir" && i+1<args.size())state=args[++i];
+            else if(args[i]=="--request-id" && i+1<args.size())ids<<args[++i];
+            else if(args[i]=="--apply")apply=true;
+            else if(args[i]=="--runtime-stopped")stopped=true;
+            else return 2;
+        }
+        if(!QDir::isAbsolutePath(state) || ids.isEmpty() || (apply && !stopped))return 2;
+        // Operator must stop the old runtime and review provenance before apply.
+        // Preview uses the same locked eligibility checks but writes nothing.
+        bool all=true;
+        for(const auto &id:ids) {
+            const bool ok=moveSession::budgetTransition(state,state+"/"+id,false,true,apply);
+            std::cout<<id.toStdString()<<": "<<(ok?(apply?"released; history retained":"eligible unsent hold; preview only"):"not eligible; unchanged")<<"\n";
+            all=all && ok;
+        }
+        return all?0:1;
     }
     if(args.size()<3 || args[1]!="key" || !QStringList{"status","set","remove"}.contains(args[2]))return 2;
     QString config="/home/root/.config/ink-diary/config.json",root="/home/root/xovi/move-session-small-templates-v4";bool json=false;

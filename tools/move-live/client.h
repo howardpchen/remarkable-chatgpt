@@ -96,6 +96,7 @@ inline QString transportFailure(int status,QNetworkReply::NetworkError networkEr
 // retries, redirect following, insecure TLS fallback, or notebook persistence.
 class Client final : public QObject {
 public:
+    std::function<bool()> dispatchGuard;
     std::function<void(const QJsonObject &)> usageObserver;
     std::function<void(int,const QString &)> providerObserver;
     using Done=std::function<void(QString,QString)>;
@@ -124,6 +125,9 @@ public:
         auto request=diaryOpenAiRequest(key);
         auto *manager=injected;
         if(!manager) manager=new QNetworkAccessManager(this);
+        // Persist uncertainty BEFORE post: a crash can retain a hold, never
+        // refund a request that might have reached the provider.
+        if(dispatchGuard && !dispatchGuard()) {finish({},"Accounting dispatch guard unavailable; no request sent");return;}
         reply_=manager->post(request,body);
 #ifdef INK_MOVE_PER_REQUEST
         qInfo("ink-move lifecycle request-posted");
@@ -151,7 +155,6 @@ private:
         qInfo("ink-move lifecycle reply-finished");
 #endif
         if(!drain())return;
-        if(!valid_ || !valid_()) {finish({},"Cancelled or page changed during API request");return;}
         const int httpStatus=reply_->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
         if(providerObserver) providerObserver(httpStatus,
             QJsonDocument::fromJson(bytes_).object().value("error").toObject().value("code").toString());
@@ -166,6 +169,7 @@ private:
             QJsonParseError error;const auto doc=QJsonDocument::fromJson(bytes_,&error);
             if(error.error!=QJsonParseError::NoError || !doc.isObject())throw std::runtime_error("Invalid API JSON");
             if(usageObserver)usageObserver(doc.object());
+            if(!valid_ || !valid_()) {finish({},"Cancelled or page changed during API request");return;}
             const auto answer=parse(doc.object());
             finish(answer.text,answer.notice);
         } catch(const std::exception &e) {finish({},QString::fromUtf8(e.what()));}

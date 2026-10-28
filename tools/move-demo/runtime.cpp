@@ -112,6 +112,9 @@ public:
 #ifdef INK_MOVE_LIVE_TEST
         if(client_) client_->cancel();
 #endif
+#ifdef INK_MOVE_DOLLAR_BUDGET
+        moveSession::budgetTransition(workflow::sessionRoot,workflow::base,false);
+#endif
         if (lease_) lease_->release();
 #ifdef INK_MOVE_PER_REQUEST
         toolbarLease_.reset();
@@ -146,6 +149,8 @@ public:
         result.insert("budgetTotalUsd",5.0);
         result.insert("budgetAvailableUsd",double(budget.available)/1e9);
         result.insert("budgetReady",budget.ok);
+        result.insert("budgetSettledGuardUsd",double(budget.settled)/1e9);
+        result.insert("budgetHeldUsd",double(budget.unsettledReserved)/1e9);
         result.insert("budgetReservationUsd",double(moveSession::budgetReservation)/1e9);
         result.insert("requestsRemaining",-1); // No independent request-count cap.
 #endif
@@ -241,6 +246,10 @@ private:
         #ifdef INK_MOVE_PER_REQUEST
         qInfo("ink-move lifecycle request-terminal stage=%d",int(stage_));
 #endif
+#ifdef INK_MOVE_DOLLAR_BUDGET
+        // A durable dispatch marker blocks refunds even after timeout/cancellation.
+        moveSession::budgetTransition(workflow::sessionRoot,workflow::base,false);
+#endif
         timer_.stop(); busy_=false; stage_=Stage::Terminal; message_=reason;
         if (lease_) {lease_->release();lease_->deleteLater();lease_.clear();}
 #ifdef INK_MOVE_PER_REQUEST
@@ -325,6 +334,9 @@ private:
             client_=new moveLive::Client(this);
 #ifdef INK_MOVE_DOLLAR_BUDGET
             const auto reservedPath=workflow::base;
+            client_->dispatchGuard=[reservedPath] {
+                return moveSession::budgetTransition(workflow::sessionRoot,reservedPath,true);
+            };
             client_->usageObserver=[reservedPath](const QJsonObject &response) {
                 moveSession::budgetSettle(workflow::sessionRoot,reservedPath,response);
             };

@@ -254,7 +254,11 @@ int main(int argc,char **argv) {
         moveDemo::Runtime reloaded(&app);
         moveDemo::RuntimeTest::setup(reloaded,[]{return QString();});moveDemo::RuntimeTest::live(reloaded,&manager);
         #ifdef INK_MOVE_PER_REQUEST
+#ifdef INK_MOVE_DOLLAR_BUDGET
+        assert(moveSession::remaining(workflow::sessionRoot)==initialAllowance-(scenario=="teardown-api"?1:0));
+#else
         assert(moveSession::remaining(workflow::sessionRoot)==initialAllowance-1);
+#endif
 #else
         assert(!reloaded.status()["canStart"].toBool());reloaded.start();assert(!reloaded.status()["busy"].toBool());
 #endif
@@ -324,7 +328,12 @@ int main(int argc,char **argv) {
     }
 #endif
 #ifdef INK_MOVE_PER_REQUEST
+#ifdef INK_MOVE_DOLLAR_BUDGET
+    assert(moveSession::remaining(workflow::sessionRoot)==initialAllowance-(manager.requests?1:0));
+    assert(QFile::exists(workflow::base+(manager.requests?"/BUDGET_DISPATCH":"/BUDGET_RELEASE")));
+#else
     assert(moveSession::remaining(workflow::sessionRoot)==initialAllowance-1);
+#endif
     if(scenario=="success" || scenario=="http-error" || scenario=="cancel") {
         QFile profileBefore(workflow::sessionRoot+referenceName);assert(profileBefore.open(QIODevice::ReadOnly));
         const auto originalProfile=profileBefore.readAll();profileBefore.close();

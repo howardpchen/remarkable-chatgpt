@@ -11,6 +11,21 @@ Item {
     anchors.bottom: parent ? parent.bottom : undefined
     anchors.margins: 16
     property bool controlsExpanded: false
+    function restartIdleCollapse() {
+        idleCollapse.stop();
+        if (controlsExpanded && !demoBusy && visible) idleCollapse.start();
+    }
+    onControlsExpandedChanged: restartIdleCollapse()
+    onVisibleChanged: restartIdleCollapse()
+    Timer {
+        id: idleCollapse
+        objectName: "moveUiIdleCollapse"
+        interval: 10000
+        repeat: false
+        onTriggered: {
+            if (!moveUiProbe.demoBusy) moveUiProbe.controlsExpanded = false;
+        }
+    }
     readonly property bool panelExpanded: controlsExpanded || demoBusy
     width: parent ? Math.max(0, Math.min(panelExpanded ? 360 : 72, parent.width - 32)) : 0
     height: panelExpanded ? 176 : 72
@@ -62,7 +77,8 @@ Item {
     }
     onDemoBusyChanged: {
         if (demoBusy) dismissedUntilToolbar = false;
-        else controlsExpanded = true; // Keep completion/error visible until explicitly collapsed.
+        else controlsExpanded = true; // Completion/error gets a fresh idle interval.
+        restartIdleCollapse();
     }
     visible: !dismissedUntilToolbar && !diaryCaptureSuppressed && parent !== null && parent.documentLoaded === true && parent.width >= 320 && parent.height >= 352
     property bool demoBusy: false
@@ -71,6 +87,8 @@ Item {
     property bool dollarBudget: false
     property real budgetAvailable: 0
     property real budgetReservation: 0
+    property real budgetHeld: 0
+    property real budgetSettledGuard: 0
     property bool budgetReady: false
     clip: true
     XoviMessageBroker { id: demoBroker }
@@ -78,7 +96,7 @@ Item {
     property string localMessage: "Text · checking budget"
 
     function statusLabel() {
-        var budget = dollarBudget ? " · $" + budgetAvailable.toFixed(2) : "";
+        var budget = dollarBudget ? " · left $" + budgetAvailable.toFixed(2) : "";
         if (localMessage.indexOf("inserted") >= 0) return "Done" + budget;
         if (localMessage.indexOf("Thinking") === 0) return "Thinking…";
         if (localMessage.indexOf("Live text test") === 0) return "Reading page…";
@@ -96,6 +114,8 @@ Item {
             moveUiProbe.budgetAvailable = result.budgetAvailableUsd || 0;
             moveUiProbe.budgetReservation = result.budgetReservationUsd || 0;
             moveUiProbe.budgetReady = result.budgetReady === true;
+            moveUiProbe.budgetHeld = result.budgetHeldUsd || 0;
+            moveUiProbe.budgetSettledGuard = result.budgetSettledGuardUsd || 0;
             moveUiProbe.demoBusy = result.busy === true;
             moveUiProbe.demoArmed = result.canStart === true;
             moveUiProbe.localMessage = result.message || result.error || "Text answer unavailable";
@@ -124,6 +144,13 @@ Item {
         border.width: 1
         radius: 12
 
+        MouseArea {
+            anchors.fill: parent
+            onPressed: idleCollapse.stop()
+            onReleased: moveUiProbe.restartIdleCollapse()
+            onCanceled: moveUiProbe.restartIdleCollapse()
+        }
+
         Rectangle {
             id: launcher
             objectName: "moveUiProbeLauncher"
@@ -141,6 +168,9 @@ Item {
             }
             MouseArea {
                 anchors.fill: parent
+                onPressed: idleCollapse.stop()
+                onReleased: moveUiProbe.restartIdleCollapse()
+                onCanceled: moveUiProbe.restartIdleCollapse()
                 onClicked: moveUiProbe.controlsExpanded = true
             }
         }
@@ -165,6 +195,9 @@ Item {
             }
             MouseArea {
                 anchors.fill: parent
+                onPressed: idleCollapse.stop()
+                onReleased: moveUiProbe.restartIdleCollapse()
+                onCanceled: moveUiProbe.restartIdleCollapse()
                 onClicked: {
                     if (moveUiProbe.toolbarsHidden && !moveUiProbe.demoBusy) {
                         moveUiProbe.controlsExpanded = false;
@@ -192,6 +225,9 @@ Item {
             }
             MouseArea {
                 anchors.fill: parent
+                onPressed: idleCollapse.stop()
+                onReleased: moveUiProbe.restartIdleCollapse()
+                onCanceled: moveUiProbe.restartIdleCollapse()
                 onClicked: {
                     if (!moveUiProbe.demoBusy) moveUiProbe.controlsExpanded = false;
                 }
@@ -210,6 +246,21 @@ Item {
             font.pixelSize: 22
             wrapMode: Text.WordWrap
             text: moveUiProbe.statusLabel()
+            color: "black"
+        }
+
+        Text {
+            objectName: "moveUiBudgetDetail"
+            visible: moveUiProbe.panelExpanded && moveUiProbe.dollarBudget
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: probeButton.top
+            anchors.leftMargin: 12
+            anchors.rightMargin: 12
+            anchors.bottomMargin: 3
+            font.pixelSize: 14
+            text: "Guard $" + moveUiProbe.budgetSettledGuard.toFixed(4) +
+                  " · held $" + moveUiProbe.budgetHeld.toFixed(2) + " (not billing)"
             color: "black"
         }
 
@@ -236,6 +287,9 @@ Item {
 
             MouseArea {
                 anchors.fill: parent
+                onPressed: idleCollapse.stop()
+                onReleased: moveUiProbe.restartIdleCollapse()
+                onCanceled: moveUiProbe.restartIdleCollapse()
                 enabled: moveUiProbe.demoBusy || moveUiProbe.demoArmed
                 onClicked: {
                     moveUiProbe.clicks += 1;

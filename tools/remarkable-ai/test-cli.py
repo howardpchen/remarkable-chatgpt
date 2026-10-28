@@ -71,3 +71,21 @@ with tempfile.TemporaryDirectory() as tmp:
     # Safe state root refuses symlink ancestors; status does not create any files.
     assert snapshot()==saved
 print(f'PASS CLI: {cases} status cases plus hidden set/remove, preserved ledger/settings and unsafe-path rejection')
+
+# Reviewed legacy reconciliation is preview-first, explicit-ID, offline-only.
+with tempfile.TemporaryDirectory() as tmp:
+    root=pathlib.Path(tmp);write(root/'budget-policy.json',policy)
+    (root/'1').mkdir(mode=0o700);(root/'2').mkdir(mode=0o700)
+    (root/'2'/'START_CONSUMED').write_text('consumed\n')
+    cmd=[binary,'budget','reconcile-unsent','--state-dir',str(root),'--request-id','1']
+    before={str(p.relative_to(root)):p.read_bytes() for p in root.rglob('*') if p.is_file()}
+    assert subprocess.run(cmd,capture_output=True).returncode==0
+    assert before=={str(p.relative_to(root)):p.read_bytes() for p in root.rglob('*') if p.is_file()}
+    assert subprocess.run(cmd+['--apply'],capture_output=True).returncode==2
+    assert subprocess.run(cmd+['--apply','--runtime-stopped'],capture_output=True).returncode==0
+    assert (root/'1'/'BUDGET_RELEASE').read_text()=='legacy-no-start-v1\n'
+    assert subprocess.run(cmd+['--apply','--runtime-stopped'],capture_output=True).returncode==1
+    cmd[-1]='2';assert subprocess.run(cmd+['--apply','--runtime-stopped'],capture_output=True).returncode==1
+    assert not (root/'2'/'BUDGET_RELEASE').exists()
+    assert json.loads((root/'budget-policy.json').read_text())==policy
+print('PASS reconciliation: read-only preview, explicit offline apply, repeat/started refusal, preserved history/policy')

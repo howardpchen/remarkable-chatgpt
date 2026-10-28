@@ -51,6 +51,38 @@ int main(int argc,char **argv) {
     QTemporaryDir historic;assert(QDir(historic.path()).mkdir("1") && QDir(historic.path()).mkdir("2"));
     policy(historic.path(),3);assert(moveSession::reserve(historic.path())==historic.path()+"/3");
     assert(moveSession::budgetStatus(historic.path()).available==moveSession::budgetTotal-moveSession::budgetReservation);
+    // Definitively local attempts are released without deleting any history.
+    QTemporaryDir transitions;policy(transitions.path());const auto r=transitions.path();
+    const auto local=moveSession::reserve(r);
+    assert(moveSession::budgetTransition(r,local,false));
+    assert(!moveSession::budgetTransition(r,local,true));
+    assert(!moveSession::budgetTransition(r,local,false));
+    moveSession::budgetSettle(r,local,usage(100,10));
+    assert(!QFile::exists(local+"/BUDGET_COST"));
+    assert(moveSession::budgetStatus(r).available==moveSession::budgetTotal);
+    assert(moveSession::budgetStatus(r).releasedAttempts==1);
+    const auto sent=moveSession::reserve(r);
+    assert(moveSession::budgetTransition(r,sent,true));
+    assert(!moveSession::budgetTransition(r,sent,false));
+    assert(!moveSession::budgetTransition(r,sent,true)); // one dispatch only
+    assert(moveSession::budgetStatus(r).unsettledReserved==moveSession::budgetReservation);
+    auto details=usage(1000,100);auto u=details["usage"].toObject();
+    u.insert("input_tokens_details",QJsonObject{{"cached_tokens",800}});details["usage"]=u;
+    moveSession::budgetSettle(r,sent,details);
+    assert(moveSession::budgetStatus(r).settled==1000*moveSession::inputRate+100*moveSession::outputRate);
+    QFile metadata(sent+"/BUDGET_USAGE.json");assert(metadata.open(QIODevice::ReadOnly));
+    const auto saved=metadata.readAll();assert(QJsonDocument::fromJson(saved).object()["cachedInputTokens"].toInt()==800);
+    moveSession::budgetSettle(r,sent,usage(2,1));metadata.seek(0);assert(metadata.readAll()==saved);
+    assert(QDir(r).mkdir("3"));assert(::chmod(QFile::encodeName(r+"/3").constData(),0700)==0);
+    assert(!moveSession::budgetTransition(r,r+"/3",false)); // legacy requires explicit scope
+    assert(moveSession::budgetTransition(r,r+"/3",false,true));
+    assert(QDir(r).mkdir("4"));assert(::chmod(QFile::encodeName(r+"/4").constData(),0700)==0);
+    QFile start(r+"/4/START_CONSUMED");assert(start.open(QIODevice::WriteOnly));start.close();
+    assert(!moveSession::budgetTransition(r,r+"/4",false,true));
+    assert(!moveSession::budgetTransition(r,r+"/../4",false,true));
+    QFile badRelease(r+"/4/BUDGET_RELEASE");assert(badRelease.open(QIODevice::WriteOnly));badRelease.write("partial");badRelease.close();
+    assert(badRelease.setPermissions(QFileDevice::ReadOwner|QFileDevice::WriteOwner));
+    assert(!moveSession::budgetStatus(r).ok); // corrupt release fails closed
     const auto link=root+"-link";assert(::symlink(QFile::encodeName(root).constData(),QFile::encodeName(link).constData())==0);
     assert(moveSession::reserve(link).isEmpty());assert(QFile::remove(link));
     assert(::chmod(QFile::encodeName(historic.path()).constData(),0755)==0);assert(moveSession::reserve(historic.path()).isEmpty());

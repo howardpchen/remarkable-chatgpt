@@ -1,0 +1,99 @@
+{
+  "basis": "Move per-request dollar-ledger runtime; Ferrari-specific isolated adaptation",
+  "upstreamSources": {
+    "runtime.cpp": {
+      "path": "tools/move-demo/runtime.cpp",
+      "sha256": "dd0720978ea38573ed123ad6fffdc8416ca52f8ac5005c5cef12539319125dec"
+    },
+    "workflow.cpp": {
+      "path": "tools/offline-workflow/workflow.cpp",
+      "sha256": "851951b68d53a7d6b076abca22104205718773506e0823c6c6d61fc9d41ea0c3"
+    },
+    "admission.h": {
+      "path": "tools/move-demo/admission.h",
+      "sha256": "1bd76706fbd05620f713e7d17df734cb7a5211e047b17e29827e1d0cc03ee647"
+    },
+    "orientation.h": {
+      "path": "src/move-orientation.h",
+      "sha256": "0a064af2e20b0fed646893b675470c44f9ccde804c747204c2c2aa84a985b07d"
+    },
+    "capture-layout.h": {
+      "path": "src/capture-layout.h",
+      "sha256": "c367457b734b77b8b7f5961f91bebef5a7b2a9fbad0e6d53f220441e737b53f4"
+    },
+    "readonly-mapping.h": {
+      "path": "src/readonly-mapping.h",
+      "sha256": "5aba720cff250b9ab68b2b2bcb599efb28b0cb85d6e5090a29b305645ce99edf"
+    },
+    "readonly-template.h": {
+      "path": "src/readonly-template.h",
+      "sha256": "ab545c52b2434761f9e94fe70e504d6c4476e50bac1d2094974899e12d890e9c"
+    },
+    "native-pose.h": {
+      "path": "tools/diagnostic/native-pose.h",
+      "sha256": "b1464df9a32f80a077e0ee674907850d9ad3261edb06958c9f0feb691bcd4ece"
+    },
+    "probe.cpp": {
+      "path": "tools/diagnostic/probe.cpp",
+      "sha256": "0481da1866b5728bfb613d559c8f7c24f4ef928bbe29827be9466441d187fbf4"
+    },
+    "policy.h": {
+      "path": "tools/diagnostic/policy.h",
+      "sha256": "ccf26db4dc64710ea6afc87ebb1a42247f82cf69804e419d25df202471ab3824"
+    },
+    "quota.h": {
+      "path": "tools/move-session/quota.h",
+      "sha256": "ac303d2c1132d04eaa86050a78a7b671614b0ddb534e2e95fecda33a88d13682"
+    },
+    "budget.h": {
+      "path": "tools/move-session/budget.h",
+      "sha256": "f0e1a2e1189674e4ba188e14d98403c307a4ba28008a74d31ade6a95a9a4d2a2"
+    },
+    "page-profile.h": {
+      "path": "tools/move-session/page-profile.h",
+      "sha256": "18e50ec8673339acca564a41a723113a1d72ce970c88fbd0d1ae8bf3b18a09ce"
+    },
+    "toolbar-lease.h": {
+      "path": "tools/move-session/toolbar-lease.h",
+      "sha256": "4b5a97b44bee905328e02e9d053e21d25a2fa93170bdb5aa416926daeaebcfd8"
+    },
+    "client.h": {
+      "path": "tools/move-live/client.h",
+      "sha256": "f131197b76cd6b460d44c07515e69d48a0d5424dafd6f0e082070173418e5d21"
+    },
+    "config.h": {
+      "path": "tools/move-live/config.h",
+      "sha256": "bc71f5bd880dc9780b6630a5d5260ab33f72214e3fa431c09c6f184459a11b2e"
+    },
+    "provider-status.h": {
+      "path": "tools/remarkable-ai/provider-status.h",
+      "sha256": "4d769224429ef7e50c0d39d0dfeec849f372c118fe4b71d07bb8f578eb6e7a16"
+    },
+    "mock-transport.h": {
+      "path": "tools/move-live/mock-transport.h",
+      "sha256": "54162bc109af08741fafd64c46d3aabda952d232d8b260d2cd77c8687bc85480"
+    },
+    "run-directory.h": {
+      "path": "tools/move-live/run-directory.h",
+      "sha256": "b5e37def17eac70a814cc89161bd371a234eab69c57de169af02ad9ae46948bb"
+    },
+    "PaperProLive.qml": {
+      "path": "tools/move-session/MoveLive.qml",
+      "sha256": "6d6fbd6edc5f8c84c01002d23ddb1124038d1a583493eafcb353ea8c29bdb264"
+    },
+    "live.xovi": {
+      "path": "tools/move-live/live.xovi",
+      "sha256": "3428a97e03c5597e8734e31bb5584f2e0f77ea2746b38043f286f86e3cecd47d"
+    },
+    "live.map": {
+      "path": "tools/move-live/live.map",
+      "sha256": "c01a1e2150dedb4b18b538c357c714a4e942ff9b98b09479700e4a34bdb6fb6c"
+    },
+    "NativePoseBindings.qml.inc": {
+      "path": "tools/move-demo/NativePoseBindings.qml.inc",
+      "sha256": "73bd611c3bdb5c8eac75285cf9806da078d4e3c006e2ed3f1e03059a5efca64f"
+    }
+  },
+  "installed": false,
+  "deviceValidated": false
+}

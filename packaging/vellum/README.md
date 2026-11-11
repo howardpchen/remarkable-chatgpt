@@ -1,7 +1,7 @@
 # Local Vellum package
 
-This directory implements a **local experimental Move package**, not a published
-catalog entry. `VELBUILD` follows upstream Vellum conventions; `prepare.py`
+This directory implements **local experimental Ferrari and Chiappa packages**,
+not published catalog entries. `VELBUILD` follows upstream Vellum conventions; `prepare.py`
 stages generic target binaries and firmware-hashed QMD with fixed SHA-512 source
 checksums. `build-package.sh` uses upstream **vbuild** to generate APKBUILD and
 Alpine **abuild** inside a pinned disposable builder to produce a signed APK.
@@ -9,7 +9,7 @@ It does not invent a package format or install a package manager on the host.
 
 ## Build
 
-Prerequisites: exact Chiappa OS 3.28.0.172 SDK / Qt 6.10.3, XOVI source,
+Prerequisites: exact device-specific OS 3.28.0.172 SDK / Qt 6.10.3, XOVI source,
 firmware hashtab, qmldiff, upstream vbuild 0.0.36, Docker and OpenSSL.
 Existing privately obtained firmware resources are build inputs, never release
 assets. Keep SDKs and extracted resources outside the source repository.
@@ -27,7 +27,7 @@ VBUILD=/path/to/vbuild PACKAGE_INPUT="$PWD/build/vellum-local/remarkable-ai-move
   bash packaging/vellum/build-package.sh
 ```
 
-The output is `build/vellum-dist/aarch64/remarkable-ai-move-0.1.0_beta1-r0.apk`.
+The output is `build/vellum-dist/aarch64/remarkable-ai-move-0.2.0_beta1-r0.apk`.
 `build/vellum-signing/` contains a **private local development signing key**; keep
 it local and never include it in releases. Only its `.pub` file is distributable.
 The builder gets only scoped input/output/signing mounts, no Docker socket,
@@ -66,3 +66,51 @@ See [SETUP.md](SETUP.md) for private state, manual migration, calibration and
 upgrade/removal requirements. Do not pass a private signing key to a tablet or
 silently modify its trust store. An unsigned/untrusted-key bypass is not an
 installation procedure for this project.
+
+
+## Device-specific packages (2026-11-11)
+
+The same maintained vbuild/abuild pipeline now prepares separate packages:
+
+| Device | Codename | Package | CLI | Model dependency |
+|---|---|---|---|---|
+| Paper Pro | Ferrari | remarkable-ai-ferrari | remarkable-ai-ferrari | rmpp |
+| Paper Pro Move | Chiappa | remarkable-ai-move | remarkable-ai | rmppm |
+
+`prepare.py --device chiappa` remains the default. Both require exact
+OS3.28.0.172 / Qt6.10.3 AArch64 SDK builds; do not exchange SDKs or binaries.
+`--module` and `--cli` select fresh exact-SDK artifacts; ELF architecture and
+embedded device-specific private-state identity are checked. `--release 1`
+prepares the upgrade test release. Ferrari also requires the privately reviewed
+original `--document-view`; its native bridge and exact-resource QMD application
+are validated locally before staging. Only the hashed generic QMD is packaged,
+never the original resource or hashtab.
+
+```
+python3 packaging/vellum/prepare.py --device ferrari \
+  --module build/ferrari-target/ink-diary-paper-pro-live.so \
+  --cli build/ferrari-target/remarkable-ai-ferrari \
+  --qmldiff /path/to/qmldiff --hashtab /private/ferrari/hashtab \
+  --document-view /private/ferrari/DocumentView.qml \
+  --output build/vellum-local/ferrari
+```
+
+Build the target artifacts first using `tools/paper-pro-portrait/session/build.sh`
+with `SDK_PRODUCT=ferrari SDK_RELEASE=3.28.0.172`, the exact `SDK_ENV`,
+`XOVI_REPO`, and a fresh `PAPER_PRO_BUILD_DIR`. Then use the same
+`build-package.sh` command as above with that prepared input.
+For lifecycle tests set `TEST_DEVICE=ferrari` or `chiappa` and use separate
+empty `/test` mounts, alongside the signed r0/r1 packages and public key.
+Run `audit-package.py --device DEVICE --input PREPARED APK` to check the six
+exact generic payload files, model/firmware dependency and absence of hooks.
+APK signatures are independently verified by the lifecycle solver tests.
+
+See [Ferrari setup](SETUP-FERRARI.md) for independent private state, fonts,
+profile/path migration, signing trust and clean activation requirements.
+These packages preserve **workflow parity**, not identical hardware coverage:
+Ferrari admits independently calibrated CW/CCW patterned landscape; Chiappa
+retains its narrower Blank-only landscape contract. No calibration fallback or
+unsupported view is introduced by packaging. Both retain offline key management,
+dollar-ledger preservation, explicit Start/Cancel,800 output tokens and no retries.
+Neither package provisions fonts, calibration or spending allowance. No live
+Vellum installation, dependency-ABI or expanded notebook verification is implied.

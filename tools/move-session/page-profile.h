@@ -2,6 +2,8 @@
 #include "../../src/capture-layout.h"
 #include <QFile>
 #include <QJsonDocument>
+#include <QSet>
+#include <QStringList>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -25,6 +27,63 @@ inline QJsonObject loadProfile(const QString &path) {
     if(error.error!=QJsonParseError::NoError || !doc.isObject())throw std::runtime_error("Invalid device setup profile");
     return doc.object();
 }
+// On the exact supported Move firmware, opposite landscape is a physical
+// half-turn. Derive the expected pose from the REVIEWED pose, never from live
+// telemetry. Preserve every state/property and the full item sequence. Only the
+// three native window roots change local rotation; descendant local rotations
+// remain unchanged while their physical rectangles rotate with their parents.
+inline QJsonObject oppositeLandscapePose(QJsonObject pose,const DiaryMoveFrame &frame) {
+    if(!pose.value("ok").toBool() || !pose.value("items").isArray())
+        throw std::runtime_error("Reviewed landscape native pose required");
+    QJsonArray items;
+    QSet<QString> roots;
+    const QStringList windowRoots={"LegacyMainWindow","GesturesWindow","ShortcutsWindow"};
+    for(const auto &value:pose.value("items").toArray()) {
+        auto item=value.toObject();const auto rect=item.value("rect").toArray();
+        if(rect.size()!=4)throw std::runtime_error("Invalid reviewed landscape rectangle");
+        for(const auto &n:rect)if(!n.isDouble() || !std::isfinite(n.toDouble()))
+            throw std::runtime_error("Invalid reviewed landscape rectangle");
+        const double x=rect[0].toDouble(),y=rect[1].toDouble(),w=rect[2].toDouble(),h=rect[3].toDouble();
+        if(w<0 || h<0)throw std::runtime_error("Invalid reviewed landscape rectangle");
+        item.insert("rect",QJsonArray{frame.physical.width()-x-w,frame.physical.height()-y-h,w,h});
+        const auto type=item.value("type").toString();
+        if(windowRoots.contains(type)) {
+            if(roots.contains(type) || item.value("rotation")!=QJsonValue(frame.degrees) ||
+               rect!=QJsonArray{0,0,frame.physical.width(),frame.physical.height()})
+                throw std::runtime_error("Unsupported reviewed landscape window root");
+            roots.insert(type);item.insert("rotation",(frame.degrees+180)%360);
+        } else if(item.value("rotation")!=QJsonValue(0)) {
+            throw std::runtime_error("Unsupported reviewed landscape local rotation");
+        }
+        items.append(item);
+    }
+    if(roots.size()!=windowRoots.size())throw std::runtime_error("Reviewed landscape window roots required");
+    pose.insert("items",items);return pose;
+}
+inline QJsonObject oppositeLandscapeReference(QJsonObject selected,const QJsonObject &current) {
+    auto normal=selected.value("viewport").toObject();
+    const auto base=diaryMoveFrame(normal),live=diaryMoveFrame(current);
+    // Do not infer arbitrary rotations, portrait support or patterned templates.
+    // Both exact four-corner maps and the composed reading axes must agree.
+    if(base.reading!=QSize(1696,954) || base.physical!=QSize(954,1696) ||
+       live.reading!=base.reading || live.physical!=base.physical ||
+       (base.degrees!=90 && base.degrees!=270) || (live.degrees+180)%360!=base.degrees ||
+       normal.value("templateName")!="Blank" || current.value("templateName")!="Blank" ||
+       diaryMoveReadingAxes(normal).degrees!=0 || diaryMoveReadingAxes(current).degrees!=0)
+        throw std::runtime_error("Calibrated landscape half-turn required");
+    const auto raw=diaryMoveAxes(normal.value("points").toArray());
+    QJsonArray points;
+    for(const QPointF p:{QPointF(),QPointF(100,0),QPointF(0,100)}) {
+        const auto q=raw.map(QPointF(base.physical.width()-p.x(),base.physical.height()-p.y()));
+        points.append(QJsonArray{q.x(),q.y()});
+    }
+    normal.insert("points",points);
+    normal.insert("windowCorners",current.value("windowCorners"));
+    selected.insert("viewport",normal);
+    for(const auto &field:{"nativePose","hiddenNativePose"})
+        selected.insert(field,oppositeLandscapePose(selected.value(field).toObject(),base));
+    return selected;
+}
 inline QJsonObject referenceForStart(const QJsonObject &profile,const QJsonObject &current) {
     const auto size=diaryMoveViewportSize(current);
     auto selected=profile;
@@ -38,6 +97,9 @@ inline QJsonObject referenceForStart(const QJsonObject &profile,const QJsonObjec
     } else if(schema!=3 || size!=QSize(954,1696)) {
         throw std::runtime_error("Orientation-specific device setup profile required");
     }
+    if(schema==4 && size==QSize(1696,954) &&
+       diaryMoveFrame(selected.value("viewport").toObject()).degrees!=diaryMoveFrame(current).degrees)
+        selected=oppositeLandscapeReference(selected,current);
     if(selected.value("captureArea").toArray()!=QJsonArray{0,0,diaryMoveFrame(current).physical.width(),diaryMoveFrame(current).physical.height()} ||
        selected.value("nativePose").toObject().isEmpty() ||
        selected.value("hiddenNativePose").toObject().isEmpty())

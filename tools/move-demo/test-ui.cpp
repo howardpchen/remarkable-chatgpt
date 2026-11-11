@@ -367,12 +367,15 @@ int main(int argc,char **argv) {
     assert(splitPanel->parentItem()==readingView && splitPanel->property("nativeToolbar").value<QObject *>()==toolbar);
     splitPanel->setProperty("controlsExpanded",true);QTest::qWait(20);
     assert(splitPanel->mapRectToScene(splitPanel->boundingRect())==QRectF(16,1320,176,360));
+    readingView->setRotation(270);readingView->setPosition({0,1696});QTest::qWait(20);
+    assert(splitPanel->width()==360 && splitPanel->height()==176);
+    assert(splitPanel->mapRectToScene(splitPanel->boundingRect())==QRectF(762,16,176,360));
     assert(splitPanel->isVisible());
     splitPanel->setProperty("diaryRequestToolbarSuppressed",true);
     assert(!toolbar->property("visible").toBool());
     delete splitPanel;assert(toolbar->property("visible").toBool());delete readingView;
     root->setProperty("diaryNativePoseObjects",QVariantMap{{"toolbar",QVariant::fromValue(toolbar)},{"zoomButton",QVariant::fromValue(zoomButton)}});
-    std::cout<<"PASS actual QML split-framebuffer reparent, rotated owner and retained toolbar bridge\n";
+    std::cout<<"PASS actual QML split-framebuffer reparent, both landscape turns, exact owner and retained toolbar bridge\n";
     moveSession::ToolbarLease destroyedRequest;
     assert(destroyedRequest.acquire(&window).isEmpty());
     panel->setProperty("diaryCaptureSuppressed",true);

@@ -64,6 +64,7 @@ int main(int argc,char **argv) {
     const QString scenario=argc>1?QString::fromLocal8Bit(argv[1]):"success";
     const bool landscape=scenario.startsWith("landscape");
     const bool split=scenario.startsWith("landscape-split");
+    const bool reverseLandscape=split && scenario.contains("reverse");
     const bool variableZoom=(scenario.startsWith("zoom-") && scenario!="zoom-change" && scenario!="zoom-change-api") || scenario.startsWith("landscape-split-zoom-");
     const bool zoomFailure=variableZoom && scenario.contains("change-");
     const QSize size=landscape?QSize(1696,954):QSize(954,1696);
@@ -112,7 +113,14 @@ int main(int argc,char **argv) {
 #ifdef INK_MOVE_PER_REQUEST
     if(landscape && scenario!="landscape-missing" && scenario!="landscape-split-missing") {
         profile.insert("schema",4);
-        const auto calibration=profile;
+        auto calibration=profile;
+        if(reverseLandscape) {
+            QJsonArray items;
+            for(const auto &type:{"LegacyMainWindow","GesturesWindow","ShortcutsWindow"})
+                items.append(QJsonObject{{"type",type},{"rect",QJsonArray{0,0,954,1696}},{"rotation",90}});
+            const QJsonObject pose{{"ok",true},{"items",items}};
+            calibration.insert("nativePose",pose);calibration.insert("hiddenNativePose",pose);
+        }
         profile.insert("orientations",QJsonObject{{"landscape",calibration}});
     }
 #endif
@@ -121,6 +129,7 @@ int main(int argc,char **argv) {
     reference.write(QJsonDocument(QJsonObject{{"schema",1},{"viewport",vp}}).toJson());
 #endif
     reference.close();
+    if(reverseLandscape) {view.setRotation(270);view.setPosition({0,1696});}
     assert(reference.setPermissions(QFileDevice::ReadOwner|QFileDevice::WriteOwner));
 #ifdef INK_MOVE_PER_REQUEST
     if(scenario=="landscape-split-preview") {
@@ -153,9 +162,10 @@ int main(int argc,char **argv) {
         ++captures; captureVisible |= panel->isVisible();
         if(scenario=="landscape-change-capture")window.resize(954,1696);
         if(scenario=="landscape-split-change-capture")view.setRotation(270);
+        if(scenario=="landscape-split-reverse-change-capture")view.setRotation(90);
         const auto path=QString::fromUtf8(argument).section(',',0,0);
         if (scenario!="capture-timeout") {
-            auto frame=split?image.transformed(QTransform().rotate(90)):image;
+            auto frame=split?image.transformed(QTransform().rotate(reverseLandscape?270:90)):image;
             if(scenario=="landscape-frame-mismatch")frame=QImage(954,1696,QImage::Format_RGB32);
             if(scenario=="landscape-split-frame-mismatch")frame=image;
             if (scenario=="changed-pixels" && captures==2) frame.setPixelColor(450,diaryMoveBoundedCaptureArea().y()+80,Qt::black);
@@ -178,6 +188,7 @@ int main(int argc,char **argv) {
     if(scenario=="http-error")manager.code=401;
     if(scenario=="shutdown-api" || scenario=="teardown-api" || scenario=="api-timeout" || scenario=="cancel-api" || scenario=="page-change-api" || scenario=="template-change-api" || scenario=="zoom-change-api" || scenario=="dots-change-api" || scenario=="landscape-change-api" || scenario=="landscape-split-change-api")manager.delay=-1;
     if(variableZoom && scenario.endsWith("change-api"))manager.delay=-1;
+    if(scenario=="landscape-split-reverse-change-api")manager.delay=-1;
     manager.onDispatch=[&]{
         if(variableZoom && scenario.endsWith("change-api"))QTimer::singleShot(10,&app,[&]{view.origin+=QPointF(10,20);});
         assert(panel->isVisible()); // Own UI restored throughout API wait.
@@ -186,6 +197,7 @@ int main(int argc,char **argv) {
         assert(!toolbar->property("visible").toBool() && !toolbar->property("expanded").toBool());
 #endif
         if(scenario=="landscape-split-change-api")QTimer::singleShot(10,&app,[&]{view.setRotation(270);});
+        if(scenario=="landscape-split-reverse-change-api")QTimer::singleShot(10,&app,[&]{view.setRotation(90);});
         if(scenario=="landscape-change-api")QTimer::singleShot(10,&app,[&]{window.resize(954,1696);});
         if(scenario=="dots-change-api")QTimer::singleShot(10,&app,[&]{document.name="P Grid small";});
         if(scenario=="same-page-ink")image.setPixelColor(450,80,Qt::black);

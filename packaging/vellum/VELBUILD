@@ -1,7 +1,7 @@
 # Local experimental binary package. prepare.py supplies exact SHA-512 checksums.
 maintainer="OpenClaw local development <openclaw@example.invalid>"
 pkgname=remarkable-ai-move
-pkgver=0.1.0_beta1
+pkgver=0.2.0_beta1
 pkgrel=0
 upstream_author="howardpchen"
 category="productivity"

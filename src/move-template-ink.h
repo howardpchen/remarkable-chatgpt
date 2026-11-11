@@ -56,14 +56,16 @@ inline std::vector<bool> gridBands(const QImage &im,bool horizontal,double pitch
             for(int k=band.begin;k<band.end;++k)mask[k]=true;
     return mask;
 }
-inline int lastRow(const QImage &source,const QString &name,double scenePerPixel) {
+// Reusable analysis with an independently reviewed pixel pitch. This does not
+// admit a device/template or infer its physical calibration.
+inline int lastRowAtPitch(const QImage &source,const QString &name,double pitch) {
     if(name=="Blank")return lastInkRow(source);
-    if(source.isNull() || !std::isfinite(scenePerPixel) || scenePerPixel<=0)
+    if(source.isNull() || !std::isfinite(pitch) || pitch<=0)
         throw std::runtime_error("Invalid template placement geometry");
     QImage image=source.convertToFormat(QImage::Format_RGB32);
     if(name=="P Grid small") {
-        const auto rows=gridBands(image,true,52/scenePerPixel);
-        const auto cols=gridBands(image,false,52/scenePerPixel);
+        const auto rows=gridBands(image,true,pitch);
+        const auto cols=gridBands(image,false,pitch);
         auto modes=[&](const std::vector<bool> &bands,bool horizontal) {
             std::vector<int> out(bands.size(),255);
             for(size_t i=0;i<bands.size();++i)if(bands[i]) {
@@ -83,6 +85,11 @@ inline int lastRow(const QImage &source,const QString &name,double scenePerPixel
                 image.setPixel(x,y,qRgb(255,255,255));
         }
     } else if(name=="P Dots S") {
+        if(pitch<8 || pitch>256)throw std::runtime_error("Unsupported dot spacing");
+        // Factory dots are about two pixels at normal 42.5px pitch. Bound
+        // candidates by the frozen, calibrated reading-pixel pitch; lattice
+        // certification below is still required before any pixels are masked.
+        const int dotExtent=std::max(3,int(std::ceil(2*pitch/42.5)));
         struct Dot {std::vector<QPoint> pixels;double x,y;};
         std::vector<Dot> dots;
         std::vector<bool> seen(size_t(image.width())*image.height(),false);
@@ -104,10 +111,9 @@ inline int lastRow(const QImage &source,const QString &name,double scenePerPixel
                 }
             }
             // Joined handwriting is retained, even when it touches a dot.
-            if(right-left<3 && bottom-top<3)
+            if(right-left+1<=dotExtent && bottom-top+1<=dotExtent)
                 dots.push_back({std::move(pixels),(left+right)/2.0,(top+bottom)/2.0});
         }
-        const double pitch=42.5/scenePerPixel;
         const int bins=int(std::ceil(pitch));
         if(bins<8 || bins>256)throw std::runtime_error("Unsupported dot spacing");
         std::vector<int> xs(bins),ys(bins);
@@ -131,5 +137,12 @@ inline int lastRow(const QImage &source,const QString &name,double scenePerPixel
     for(int y=image.height()-1;y>=0;--y)for(int x=0;x<image.width();++x)
         if(qGray(image.pixel(x,y))<210)return y;
     return -1;
+}
+// Existing Move contract and factory constants remain unchanged.
+inline int lastRow(const QImage &source,const QString &name,double scenePerPixel) {
+    if(name=="Blank")return lastInkRow(source);
+    if(!std::isfinite(scenePerPixel) || scenePerPixel<=0)
+        throw std::runtime_error("Invalid template placement geometry");
+    return lastRowAtPitch(source,name,(name=="P Dots S"?42.5:52)/scenePerPixel);
 }
 }

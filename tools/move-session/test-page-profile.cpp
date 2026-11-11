@@ -84,6 +84,63 @@ int main(int argc,char **argv) {
     }
     std::cout<<"PASS variable zoom: 48 orientation/turn/zoom combinations, pan, immutable anchors, bounds and request freeze\n";
     std::cout<<"PASS orientation profiles: independent normals, quarter turns, missing calibration, DPR, shear/reflection and unmeasured templates rejected\n";
+    // Opposite landscape: independent synthetic expected corners, axes and
+    // physical native rectangles. No second saved normal and no live pose input.
+    auto normal=viewport;
+    normal["width"]=1696;normal["height"]=954;
+    normal["windowCorners"]=QJsonArray{QJsonArray{954,0},QJsonArray{954,1696},QJsonArray{0,0},QJsonArray{0,1696}};
+    normal["points"]=QJsonArray{QJsonArray{0,0},QJsonArray{0,-86},QJsonArray{86,0}};
+    QJsonArray nativeItems;
+    for(const auto &type:{"LegacyMainWindow","GesturesWindow","ShortcutsWindow"})
+        nativeItems.append(QJsonObject{{"type",type},{"rect",QJsonArray{0,0,954,1696}},{"rotation",90},{"opacity",1},{"scale",1}});
+    nativeItems.append(QJsonObject{{"type","QQuickLoader"},{"rect",QJsonArray{23,45,0,0}},{"rotation",0},{"opacity",0.7},{"scale",1}});
+    const QJsonObject pose{{"ok",true},{"items",nativeItems},{"states",QJsonObject{{"sentinel",42}}}};
+    auto anchor=profile;anchor["viewport"]=normal;anchor["nativePose"]=pose;anchor["hiddenNativePose"]=pose;
+    const QJsonObject saved{{"schema",4},{"orientations",QJsonObject{{"portrait",profile},{"landscape",anchor}}}};
+    const auto savedCopy=saved;
+    auto expectedItems=nativeItems;
+    for(int i=0;i<3;++i) {auto item=expectedItems[i].toObject();item["rotation"]=270;expectedItems[i]=item;}
+    auto loader=expectedItems[3].toObject();loader["rect"]=QJsonArray{931,1651,0,0};expectedItems[3]=loader;
+    auto expectedPose=pose;expectedPose["items"]=expectedItems;
+    auto opposite=normal;
+    opposite["windowCorners"]=QJsonArray{QJsonArray{0,1696},QJsonArray{0,0},QJsonArray{954,1696},QJsonArray{954,0}};
+    for(double zoom:{0.5,1.0,2.0,4.0}) {
+        const double step=86/zoom;
+        opposite["points"]=QJsonArray{QJsonArray{-71,31},QJsonArray{-71,31+step},QJsonArray{-71-step,31}};
+        const auto result=referenceForStart(saved,opposite);
+        assert(result["viewport"]==opposite && result["nativePose"]==expectedPose && result["hiddenNativePose"]==expectedPose);
+        assert(saved==savedCopy);
+        // The derived pose is exact, not an observed-pose approval. A single
+        // property mutation is different even though frame dimensions agree.
+        auto changed=expectedPose;auto states=changed["states"].toObject();states["sentinel"]=43;changed["states"]=states;
+        assert(result["hiddenNativePose"]!=changed);
+        auto changedViewport=opposite;changedViewport["windowCorners"]=normal["windowCorners"];
+        try {diaryExperimentalMoveMapping(changedViewport,result["viewport"].toObject());assert(false);}catch(const std::exception &){}
+    }
+    for(double zoom:{0.49,4.01}) {
+        const double step=86/zoom;
+        auto invalid=opposite;invalid["points"]=QJsonArray{QJsonArray{0,0},QJsonArray{0,step},QJsonArray{-step,0}};
+        assert(rejects(saved,invalid));
+    }
+    // Strictly scoped to the split Blank landscape and consistent reading axes.
+    auto invalid=opposite;invalid["points"]=normal["points"];assert(rejects(saved,invalid));
+    invalid=opposite;invalid["templateName"]="P Grid small";assert(rejects(saved,invalid));
+    invalid=opposite;auto corners=invalid["windowCorners"].toArray();corners[0]=QJsonArray{1,1696};invalid["windowCorners"]=corners;assert(rejects(saved,invalid));
+    for(int mutation=0;mutation<5;++mutation) {
+        auto badAnchor=anchor;auto badPose=pose;auto items=nativeItems;
+        if(mutation==0)items.removeAt(0);
+        if(mutation==1)items.append(items[0]);
+        if(mutation>=2) {auto item=items[0].toObject();if(mutation==2)item["rotation"]=0;if(mutation==3)item["rect"]=QJsonArray{0,0,953,1696};if(mutation==4)item["rect"]=QJsonArray{0,0,"bad",1696};items[0]=item;}
+        badPose["items"]=items;badAnchor["hiddenNativePose"]=badPose;
+        auto badSaved=saved;badSaved["orientations"]=QJsonObject{{"landscape",badAnchor}};
+        assert(rejects(badSaved,opposite));
+    }
+    // A calibration originating at the other turn derives the inverse too.
+    auto reverseAnchor=anchor;reverseAnchor["viewport"]=opposite;reverseAnchor["nativePose"]=expectedPose;reverseAnchor["hiddenNativePose"]=expectedPose;
+    auto reverseSaved=saved;reverseSaved["orientations"]=QJsonObject{{"landscape",reverseAnchor}};
+    auto reverseLive=normal;reverseLive["points"]=QJsonArray{QJsonArray{0,0},QJsonArray{0,-21.5},QJsonArray{21.5,0}};
+    assert(referenceForStart(reverseSaved,reverseLive)["hiddenNativePose"]==pose);
+    std::cout<<"PASS automatic opposite landscape: both directions, zoom/pan, immutable saved anchor, exact derived poses and invalid geometry/root rejection\n";
     QTemporaryDir dir;assert(dir.isValid());const auto path=dir.path()+"/device-profile.json";
     auto rejectsFile=[&](const QString &p){try{loadProfile(p);return false;}catch(const std::exception &){return true;}};
     assert(rejectsFile(path));

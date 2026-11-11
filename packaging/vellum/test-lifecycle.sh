@@ -26,6 +26,11 @@ trap 'exit 143' TERM
 : "${TEST_APK:?}"
 : "${TEST_UPGRADE_APK:?}"
 : "${TEST_PUBLIC_KEY:?}"
+case "${TEST_DEVICE:-chiappa}" in
+ chiappa) model=rmppm; other=rmpp; package=remarkable-ai-move; cli=remarkable-ai; module=ink-diary-move-live.so; qmd=ink-diary-ui-probe.qmd; state=move-session-small-templates-v4; config_name=ink-diary ;;
+ ferrari) model=rmpp; other=rmppm; package=remarkable-ai-ferrari; cli=remarkable-ai-ferrari; module=ink-diary-paper-pro-live.so; qmd=paper-pro-live.qmd; state=paper-pro-session-portrait-v1; config_name=remarkable-ai-ferrari ;;
+ *) echo 'Unknown test device' >&2; exit 1 ;;
+esac
 mkdir -p /test/keys
 cp "$TEST_PUBLIC_KEY" /test/keys/
 cp "$TEST_PUBLIC_KEY" /etc/apk/keys/
@@ -50,9 +55,9 @@ RECIPE
 REPODEST=/test/dependencies abuild -C "$work" -F -d -r all > /test/fixture-$label.log 2>&1
 SCRIPT
 chmod 755 /test/make-fixture.sh
-/test/make-fixture.sh right rmppm 3.28.0.172
-/test/make-fixture.sh wrongos rmppm 3.29.0.0
-/test/make-fixture.sh wrongmodel rmpp 3.28.0.172
+/test/make-fixture.sh right "$model" 3.28.0.172
+/test/make-fixture.sh wrongos "$model" 3.29.0.0
+/test/make-fixture.sh wrongmodel "$other" 3.28.0.172
 # Add real signed package to synthetic platform; use actual APK solver/file ownership.
 for label in right wrongos wrongmodel; do
     root=/test/root-$label
@@ -63,11 +68,11 @@ for label in right wrongos wrongmodel; do
         if apk --root "$root" --arch aarch64 --keys-dir /test/keys --no-network --no-scripts add "$TEST_APK" > /test/$label-rejection.log 2>&1; then
             echo "ERROR: incompatible platform accepted: $label"; exit 1
         fi
-        test ! -e "$root/home/root/.vellum/bin/remarkable-ai"
+        test ! -e "$root/home/root/.vellum/bin/$cli"
         continue
     fi
-    private="$root/home/root/xovi/move-session-small-templates-v4"
-    config="$root/home/root/.config/ink-diary"
+    private="$root/home/root/xovi/$state"
+    config="$root/home/root/.config/$config_name"
     mkdir -p "$private/1" "$config"
     chmod 700 "$private" "$private/1" "$config"
     printf '%s\n' '{"api_key":"synthetic-not-real","model":"gpt-6-luna"}' > "$config/config.json"
@@ -79,14 +84,14 @@ for label in right wrongos wrongmodel; do
     find "$private" "$config" -type f -exec sha256sum '{}' \; | sort > /test/private-before
     # No hooks should be present. Scripts remain disabled as this is not a target OS.
     apk --root "$root" --arch aarch64 --keys-dir /test/keys --no-network --no-scripts add "$TEST_APK" > /test/install.log 2>&1
-    test -x "$root/home/root/.vellum/bin/remarkable-ai"
-    test -s "$root/home/root/xovi/extensions.d/ink-diary-move-live.so"
-    test -s "$root/home/root/xovi/exthome/qt-resource-rebuilder/ink-diary-ui-probe.qmd"
+    test -x "$root/home/root/.vellum/bin/$cli"
+    test -s "$root/home/root/xovi/extensions.d/$module"
+    test -s "$root/home/root/xovi/exthome/qt-resource-rebuilder/$qmd"
     apk --root "$root" --arch aarch64 --keys-dir /test/keys --no-network --no-scripts add "$TEST_UPGRADE_APK" > /test/upgrade.log 2>&1
-    apk --root "$root" --arch aarch64 --keys-dir /test/keys --no-network --no-scripts del remarkable-ai-move > /test/remove.log 2>&1
-    test ! -e "$root/home/root/.vellum/bin/remarkable-ai"
-    test ! -e "$root/home/root/xovi/extensions.d/ink-diary-move-live.so"
-    test ! -e "$root/home/root/xovi/exthome/qt-resource-rebuilder/ink-diary-ui-probe.qmd"
+    apk --root "$root" --arch aarch64 --keys-dir /test/keys --no-network --no-scripts del "$package" > /test/remove.log 2>&1
+    test ! -e "$root/home/root/.vellum/bin/$cli"
+    test ! -e "$root/home/root/xovi/extensions.d/$module"
+    test ! -e "$root/home/root/xovi/exthome/qt-resource-rebuilder/$qmd"
     find "$private" "$config" -type f -exec sha256sum '{}' \; | sort > /test/private-after
     cmp /test/private-before /test/private-after
     test "$(stat -c %a "$config/config.json")" = 600

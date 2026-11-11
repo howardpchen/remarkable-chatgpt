@@ -1,0 +1,490 @@
+// Shared bounded Move controller, independent of production readiness.
+// Default demo build has no API/config access. Only the separate compile-time
+// INK_PAPER_PRO_LIVE_TEST target includes the single-use asynchronous text client.
+#define INK_PAPER_PRO_DEMO
+#include "workflow.cpp"
+#include "admission.h"
+#include "../../../src/capture-ui.h"
+#include <memory>
+#ifdef INK_PAPER_PRO_PER_REQUEST
+#include "quota.h"
+#include "page-profile.h"
+#include "toolbar-lease.h"
+#include "provider-status.h"
+#include <QDebug>
+#endif
+#ifdef INK_PAPER_PRO_LIVE_TEST
+#include "client.h"
+#endif
+namespace paperProRuntime {
+inline QJsonObject viewport(const workflow::Page &page) {
+    auto *doc=qobject_cast<QQuickItem *>(page.document);
+    const auto name=diaryMetadata::captureTemplateName(qmlEngine(doc),doc);
+    if (name.isEmpty()) return {};
+    auto out=diagnostic::viewportSnapshot(qmlEngine(page.view),page.view);
+    if (!out.isEmpty()) out.insert("templateName",name);
+    return out;
+}
+class LivePose final : public NativePoseSource {
+public:
+    QJsonObject reference;
+#ifdef INK_PAPER_PRO_PER_REQUEST
+    bool requestToolbarHidden=false;
+#endif
+#ifdef INK_PAPER_PRO_DEMO_HOST_TEST
+    std::function<QString()> testVerify;
+#endif
+    QString verifyLivePose(QQuickWindow *window,const QRect &crop, bool suppressed) override {
+#ifdef INK_PAPER_PRO_DEMO_HOST_TEST
+        if (testVerify) return testVerify();
+#endif
+        if (!diagnostic::allowed()) return "unsupported-runtime";
+        const auto p=workflow::current();
+        if (p.window!=window || crop!=diaryPaperProBoundedCaptureArea(window->size())) return "native-window-or-crop-changed";
+        auto *doc=qobject_cast<QQuickItem *>(p.document);
+        if (diaryMetadata::captureTemplateName(qmlEngine(doc),doc).isEmpty()) return "supported-template-required";
+        const auto pose=diagnostic::nativePose(doc);
+        if (!pose.value("ok").toBool() || pose!=reference.value(
+#ifdef INK_PAPER_PRO_LIVE_TEST
+            (suppressed
+#ifdef INK_PAPER_PRO_PER_REQUEST
+             || requestToolbarHidden
+#endif
+            )?"hiddenNativePose":"nativePose"
+#else
+            "nativePose"
+#endif
+        ).toObject()) return "native-ui-pose-changed-or-unavailable";
+#ifdef INK_PAPER_PRO_LIVE_TEST
+        if (suppressed && (!diaryPaperProCaptureUiClear(pose,window->size()) ||
+            pose.value("states").toObject().value("toolbar").toObject().value("visible")!=QJsonValue(false) ||
+            pose.value("states").toObject().value("toolbar").toObject().value("shown")!=QJsonValue(false)))
+            return "capture-ui-visible-or-unavailable";
+#endif
+        const auto resource=diagnostic::documentViewResource();
+        if (!resource.value("ok").toBool() || resource.value("sha256")!=reference.value("resourceSha256")) return "native-resource-changed";
+        const auto hashes=reference.value("files").toObject();
+        if (hashes.isEmpty() || hashes.size()>64) return "reviewed-mod-manifest-required";
+        QSet<QString> actual,reviewed;
+        for (const auto &directory:{QStringLiteral("/home/root/.cache/remarkable-ai-ferrari-runtime-20261029/extensions.d"),QStringLiteral("/home/root/.cache/remarkable-ai-ferrari-runtime-20261029/exthome/qt-resource-rebuilder")}) {
+            const QDir dir(directory);
+            const auto filter=directory.endsWith("extensions.d")?QStringList{"*"}:QStringList{"*.qmd"};
+            for (const auto &name:dir.entryList(filter,QDir::Files)) actual.insert(dir.filePath(name));
+        }
+        for (auto it=hashes.begin();it!=hashes.end();++it) reviewed.insert(it.key());
+        if (actual!=reviewed) return "installed-mod-set-changed";
+        for (auto it=hashes.begin();it!=hashes.end();++it) {
+            // A reference cannot read arbitrary files; only installed extension
+            // binary/QMD hashes, no notebook/credential paths.
+            const auto path=it.key();
+            if ((!path.startsWith("/home/root/.cache/remarkable-ai-ferrari-runtime-20261029/extensions.d/") || !path.endsWith(".so")) &&
+                (!path.startsWith("/home/root/.cache/remarkable-ai-ferrari-runtime-20261029/exthome/qt-resource-rebuilder/") || !path.endsWith(".qmd"))) return "invalid-mod-manifest-path";
+            if (path.contains("..")) return "invalid-mod-manifest-path";
+            QFile f(path);
+            if (!f.open(QIODevice::ReadOnly) || f.size()>32*1024*1024) return "mod-unavailable";
+            if (QString::fromLatin1(QCryptographicHash::hash(f.readAll(),QCryptographicHash::Sha256).toHex())!=it.value().toString()) return "mod-hash-changed";
+        }
+        return {};
+    }
+};
+#ifdef INK_PAPER_PRO_PER_REQUEST
+// Explicit setup telemetry only: no capture, config/key read, reservation,
+// profile write, networking or insertion. Do not turn live telemetry into an
+// automatic calibration approval. Native overrides are scoped and restored.
+inline QJsonObject calibrationPreview(bool busy) {
+    if(busy)return {{"ok",false},{"error","request-active"}};
+    const auto page=workflow::current();
+    auto *document=qobject_cast<QQuickItem *>(page.document);
+    const auto snapshot=viewport(page);
+    try {diaryPaperProFrame(snapshot);diaryPaperProReadingAxes(snapshot);}catch(...) {
+        return {{"ok",false},{"error","unsupported-calibration-view"}};
+    }
+    QQuickItem *control=nullptr;
+    QList<QQuickItem *> pending{page.window->contentItem()};
+    QSet<QQuickItem *> seen;
+    while(!pending.isEmpty()) {
+        auto *item=pending.takeLast();
+        if(seen.contains(item) || seen.size()>=20000)return {{"ok",false},{"error","invalid-or-oversized-control-tree"}};
+        seen.insert(item);
+        if(item->objectName()=="moveUiProbe") {if(control)return {{"ok",false},{"error","duplicate-control"}};control=item;}
+        for(auto *child:item->childItems())pending.append(child);
+    }
+    if(!control)return {{"ok",false},{"error","control-unavailable"}};
+    const auto visiblePose=diagnostic::nativePose(document);
+    if(!visiblePose.value("ok").toBool())return {{"ok",false},{"error","visible-pose-unavailable"}};
+    const auto expanded=control->property("controlsExpanded");
+    struct RestoreExpanded {
+        QPointer<QQuickItem> control;QVariant value;
+        ~RestoreExpanded(){if(control && value.metaType().id()==QMetaType::Bool)control->setProperty("controlsExpanded",value);}
+    } restore{control,expanded};
+    if(expanded.metaType().id()==QMetaType::Bool)control->setProperty("controlsExpanded",true);
+    paperProSession::ToolbarLease lease;
+    const auto error=lease.acquire(page.window);
+    if(!error.isEmpty())return {{"ok",false},{"error",error}};
+    const auto hiddenPose=diagnostic::nativePose(document);
+    lease.release();
+    const auto restoredPose=diagnostic::nativePose(document);
+    if(!visiblePose.value("ok").toBool() || !hiddenPose.value("ok").toBool() || restoredPose!=visiblePose ||
+       viewport(workflow::current())!=snapshot || !diaryPaperProCaptureUiClear(hiddenPose,page.window->size()) ||
+       hiddenPose.value("states").toObject().value("toolbar").toObject().value("visible")!=QJsonValue(false) ||
+       hiddenPose.value("states").toObject().value("toolbar").toObject().value("shown")!=QJsonValue(false))
+        return {{"ok",false},{"error","calibration-pose-or-restoration-unverified"}};
+    return {{"ok",true},{"setupTelemetryOnly",true},{"normalZoomCertified",false},
+        {"viewport",snapshot},{"nativePose",visiblePose},{"hiddenNativePose",hiddenPose},
+        {"resource",diagnostic::documentViewResource()}};
+}
+#endif
+class Runtime final : public QObject {
+public:
+    explicit Runtime(QObject *parent):QObject(parent) {
+        #ifdef INK_PAPER_PRO_PER_REQUEST
+        qInfo("ink-paper-pro lifecycle runtime-created");
+#endif
+        timer_.setInterval(75);
+        connect(&timer_,&QTimer::timeout,this,[this]{ tick(); });
+        connect(qGuiApp,&QCoreApplication::aboutToQuit,this,[this]{
+#ifdef INK_PAPER_PRO_PER_REQUEST
+            qInfo("ink-paper-pro lifecycle about-to-quit");
+#endif
+            cancel();
+#ifdef INK_PAPER_PRO_PER_REQUEST
+            qInfo("ink-paper-pro lifecycle quit-cancel-complete");
+#endif
+        });
+    }
+    ~Runtime() override {
+#ifdef INK_PAPER_PRO_PER_REQUEST
+        qInfo("ink-paper-pro lifecycle destructor-begin");
+#endif
+#ifdef INK_PAPER_PRO_LIVE_TEST
+        if(client_) client_->cancel();
+#endif
+#ifdef INK_PAPER_PRO_DOLLAR_BUDGET
+        paperProSession::budgetTransition(workflow::sessionRoot,workflow::base,false);
+#endif
+        if (lease_) lease_->release();
+#ifdef INK_PAPER_PRO_PER_REQUEST
+        toolbarLease_.reset();
+#endif
+#ifdef INK_PAPER_PRO_PER_REQUEST
+        qInfo("ink-paper-pro lifecycle destructor-body-end");
+#endif
+    }
+    QJsonObject status() const {
+        QJsonObject result= {{"ok",true},{"busy",busy_},{"message",message_},{"offlineFixture",
+#ifdef INK_PAPER_PRO_LIVE_TEST
+            false
+#else
+            true
+#endif
+        },
+            #ifdef INK_PAPER_PRO_PER_REQUEST
+            {"requestsRemaining",paperProSession::remaining(workflow::sessionRoot)},
+            {"maxOutputTokens",800},{"automaticRetries",false},{"manualPageArming",false},
+            {"canStart",!busy_ && paperProSession::remaining(workflow::sessionRoot)>0 && QFile::exists(workflow::sessionRoot+"/device-profile.json") && QFile::exists(configPath_)},
+#else
+            {"canStart",!started_ && !QFile::exists(workflow::base+"/START_CONSUMED") && !QFile::exists(workflow::base+"/INSERTION_CONSUMED") && QFile::exists(workflow::base+"/reviewed-reference.json")
+#ifdef INK_PAPER_PRO_LIVE_TEST
+                && QFile::exists(configPath_)
+#endif
+            },
+            #endif
+            {"stage",int(stage_)},{"attemptConsumed",QFile::exists(workflow::base+"/START_CONSUMED")},
+            {"insertionAttempted",workflow::phase==workflow::Phase::Consumed}};
+#ifdef INK_PAPER_PRO_DOLLAR_BUDGET
+        const auto budget=paperProSession::budgetStatus(workflow::sessionRoot);
+        result.insert("budgetTotalUsd",double(budget.total)/1e9);
+        result.insert("budgetAvailableUsd",double(budget.available)/1e9);
+        result.insert("budgetReady",budget.ok);
+        result.insert("budgetSettledGuardUsd",double(budget.settled)/1e9);
+        result.insert("budgetHeldUsd",double(budget.unsettledReserved)/1e9);
+        result.insert("budgetReservationUsd",double(paperProSession::budgetReservation)/1e9);
+        result.insert("requestsRemaining",-1); // No independent request-count cap.
+#endif
+        return result;
+    }
+    void start() {
+        #ifdef INK_PAPER_PRO_PER_REQUEST
+        if (busy_) return; // A duplicate must not cancel or mutate the running request.
+        // Dispose the previous transport only after its completion stack unwound.
+        if(client_) {client_->cancel();client_->deleteLater();client_.clear();}
+        admission_.reset(); ready_=false;
+        workflow::phase=workflow::Phase::Idle;
+        workflow::question={};workflow::answer={};workflow::liveResponse.clear();
+        workflow::base=workflow::sessionRoot;
+#else
+        if (started_) { message_="Single-use test; no retry"; return; }
+#endif
+        started_=true;
+#ifdef INK_PAPER_PRO_LIVE_TEST
+        try {key_=paperProLive::loadKey(configPath_);}
+        catch(const std::exception &e) {stop(QString::fromUtf8(e.what()));return;}
+#endif
+        const auto p=workflow::current();
+#ifdef INK_PAPER_PRO_PER_REQUEST
+        try {
+            native_.reference=paperProSession::referenceForStart(
+                paperProSession::loadProfile(workflow::sessionRoot+"/device-profile.json"),viewport(p));
+            workflow::placementReference=native_.reference;
+        } catch(const std::exception &e) {stop(QString::fromUtf8(e.what()));return;}
+#else
+        QFile file(workflow::base+"/reviewed-reference.json");
+        if (!file.open(QIODevice::ReadOnly) || file.size()>1024*1024) { stop("Reviewed UI reference required"); return; }
+        native_.reference=QJsonDocument::fromJson(file.readAll()).object();
+#ifdef INK_PAPER_PRO_LIVE_TEST
+        if (native_.reference.value("schema").toInt()!=2 ||
+            native_.reference.value("nativePose").toObject().isEmpty() ||
+            native_.reference.value("hiddenNativePose").toObject().isEmpty() ||
+            native_.reference.value("captureArea").toArray()!=QJsonArray{0,0,1620,2160}) {
+            stop("Reviewed visible and toolbar-hidden full-screen reference required");return;
+        }
+#else
+        if (native_.reference.value("schema").toInt()!=1) {stop("Invalid reviewed reference");return;}
+#endif
+#endif // The one-shot build retains its old per-page reference contract.
+#ifdef INK_PAPER_PRO_PER_REQUEST
+        // Hide before exact native-pose admission, not just at screenshot time.
+        // This compares against the reviewed hidden pose throughout the request;
+        // no alternate visible pose is synthesized or accepted from live state.
+        toolbarLease_=std::make_unique<paperProSession::ToolbarLease>();
+        const auto toolbarError=toolbarLease_->acquire(p.window);
+        if (!toolbarError.isEmpty()) {stop(toolbarError);return;}
+        native_.requestToolbarHidden=true;
+        const auto requestDir=paperProSession::reserve(workflow::sessionRoot);
+        if(requestDir.isEmpty()) {stop("Request budget/quota exhausted or unavailable");return;}
+        workflow::base=requestDir;
+        qInfo("ink-paper-pro lifecycle request-reserved");
+#endif
+        admission_=std::make_unique<Admission>(p.window,qobject_cast<QQuickItem *>(p.document),
+            native_.reference.value("viewport").toObject(),&native_);
+#if defined(INK_PAPER_PRO_DEMO_HOST_TEST) || defined(INK_PAPER_PRO_PER_REQUEST)
+        auto error=admission_->startInDirectory(viewport(p),workflow::base);
+#else
+        auto error=admission_->start(viewport(p));
+#endif
+        if (!error.isEmpty()) {stop(error);return;}
+        const auto prep=workflow::run({{"op","prepare"},{"measuredCrop",QJsonArray{diaryPaperProBoundedCaptureArea(p.window->size()).x(),diaryPaperProBoundedCaptureArea(p.window->size()).y(),diaryPaperProBoundedCaptureArea(p.window->size()).width(),diaryPaperProBoundedCaptureArea(p.window->size()).height()}}});
+        if (!prep.value("ok").toBool()) {stop(prep.value("error").toString());return;}
+        busy_=true; stage_=Stage::BeforeFirst; clock_.start(); pause_.start();
+        message_=
+#ifdef INK_PAPER_PRO_LIVE_TEST
+            "Live text test: tap Cancel to stop";
+#else
+            "Offline fixture: tap Cancel to stop";
+#endif
+        timer_.start();
+    }
+    void cancel() {
+        started_=true;
+        if (admission_) admission_->cancel();
+        if (busy_) workflow::run({{"op","cancel"}});
+        stop("Cancelled; no automatic retry");
+    }
+private:
+#ifdef INK_PAPER_PRO_DEMO_HOST_TEST
+    friend struct RuntimeTest;
+#endif
+    enum class Stage { Idle, BeforeFirst, SuppressFirst, CaptureFirst, AwaitAnswer, BeforeSecond, SuppressSecond, CaptureSecond, Terminal };
+    void stop(const QString &reason) {
+#ifdef INK_PAPER_PRO_LIVE_TEST
+        if(client_) client_->cancel();
+        key_.clear();
+#endif
+        if (busy_ && workflow::phase!=workflow::Phase::Consumed) workflow::run({{"op","cancel"}});
+        #ifdef INK_PAPER_PRO_PER_REQUEST
+        qInfo("ink-paper-pro lifecycle request-terminal stage=%d",int(stage_));
+#endif
+#ifdef INK_PAPER_PRO_DOLLAR_BUDGET
+        // A durable dispatch marker blocks refunds even after timeout/cancellation.
+        paperProSession::budgetTransition(workflow::sessionRoot,workflow::base,false);
+#endif
+        timer_.stop(); busy_=false; stage_=Stage::Terminal; message_=reason;
+        if (lease_) {lease_->release();lease_->deleteLater();lease_.clear();}
+#ifdef INK_PAPER_PRO_PER_REQUEST
+        toolbarLease_.reset(); native_.requestToolbarHidden=false;
+#endif
+        if (admission_ && admission_->phase()==Admission::Phase::Started) admission_->cancel();
+    }
+    bool boundary() {
+        if (!lease_ || !lease_->readyForCapture()) {stop("Capture UI lease unavailable");return false;}
+        const auto error=admission_->captureBoundary(viewport(workflow::current()));
+        if (!error.isEmpty()) {stop(error);return false;}
+        return true;
+    }
+    void suppress(bool second) {
+        stage_=second?Stage::SuppressSecond:Stage::SuppressFirst;
+        const auto p=workflow::current();
+        lease_=new DiaryCaptureUiSession(p.window,[this,second](auto event,const QString &error) {
+            // Callback can originate synchronously in begin(). Never delete
+            // the notifying session from its own stack; stop uses deleteLater.
+            if (!busy_) return;
+            if (event!=DiaryCaptureUiSession::Event::RenderReady) {stop(error);return;}
+            // Give the supported framebuffer backend time to see the rendered
+            // hidden control, as independently hardware-validated in the lease test.
+            readyDelay_.start(); captureSecond_=second; ready_=true;
+        },this);
+        ready_=false; lease_->begin();
+    }
+    void tick() {
+        if (!busy_) return;
+        if (clock_.elapsed()>overallTimeoutMs_) {stop("Demo timed out; controls restored");return;}
+#ifdef INK_PAPER_PRO_LIVE_TEST
+        if(stage_==Stage::AwaitAnswer) {
+            if(!liveValid()) stop("Page, viewport or native UI changed during API request");
+            return;
+        }
+#endif
+        if (stage_==Stage::BeforeFirst || stage_==Stage::BeforeSecond) {
+            // Stay cancellable with visible UI before each screenshot.
+            if (pause_.elapsed()<pauseMs_) return;
+            suppress(stage_==Stage::BeforeSecond); return;
+        }
+        if (stage_==Stage::SuppressFirst || stage_==Stage::SuppressSecond) {
+            if (!ready_ || readyDelay_.elapsed()<settleMs_) return;
+            if (!boundary()) return;
+            const auto result=workflow::run({{"op",captureSecond_?"verify":"capture"}});
+            if (!result.value("ok").toBool()) {stop(result.value("error").toString());return;}
+            stage_=captureSecond_?Stage::CaptureSecond:Stage::CaptureFirst;
+            return;
+        }
+        if (stage_!=Stage::CaptureFirst && stage_!=Stage::CaptureSecond) return;
+        if (!boundary()) return;
+        const bool second=stage_==Stage::CaptureSecond;
+        // Decode while suppressed; call the backend only after PNG availability
+        // and the final native-pose/template/page/viewport check on this GUI turn.
+        QImage decoded(workflow::base+(second?"/check.png":"/question.png"));
+        if (decoded.isNull()) {
+            if (workflow::captureClock.elapsed()>captureTimeoutMs_) stop("Capture timed out; controls restored");
+            return;
+        }
+        if (!boundary()) return;
+#ifdef INK_PAPER_PRO_LIVE_TEST
+        const auto result=workflow::run({{"op",second?"insert":"read-question"}});
+#else
+        const auto result=workflow::run({{"op",second?"insert":"render"}});
+#endif
+        if (!result.value("ok").toBool()) {stop(result.value("error").toString());return;}
+        lease_->release(); lease_->deleteLater(); lease_.clear();
+        if (second) {
+            admission_->finish(); stop(
+#ifdef INK_PAPER_PRO_LIVE_TEST
+                "Live text inserted; verify placement and Undo/Redo"
+#else
+                "Offline fixture inserted; verify placement and Undo/Redo"
+#endif
+            );
+        } else {
+#ifdef INK_PAPER_PRO_LIVE_TEST
+            #ifdef INK_PAPER_PRO_PER_REQUEST
+            qInfo("ink-paper-pro lifecycle api-dispatch-boundary");
+#endif
+            stage_=Stage::AwaitAnswer; message_="Thinking; Cancel available";
+            client_=new paperProLive::Client(this);
+#ifdef INK_PAPER_PRO_DOLLAR_BUDGET
+            const auto reservedPath=workflow::base;
+            client_->dispatchGuard=[reservedPath] {
+                return paperProSession::budgetTransition(workflow::sessionRoot,reservedPath,true);
+            };
+            client_->usageObserver=[reservedPath](const QJsonObject &response) {
+                paperProSession::budgetSettle(workflow::sessionRoot,reservedPath,response);
+            };
+#endif
+#ifdef INK_PAPER_PRO_PER_REQUEST
+            const auto fingerprint=remarkableAi::keyId(key_);
+            client_->providerObserver=[fingerprint](int status,const QString &code) {
+                remarkableAi::observe(workflow::sessionRoot,fingerprint,status,code);
+            };
+#endif
+            client_->start(workflow::question,key_,[this]{return liveValid();},
+                [this](QString text,QString error) {
+                    if(!busy_ || stage_!=Stage::AwaitAnswer)return;
+                    if(!error.isEmpty()) {stop(error);return;}
+                    if(!liveValid()) {stop("Page changed before rendering answer");return;}
+                    workflow::liveResponse=std::move(text);
+                    const auto result=workflow::run({{"op","render"}});
+                    if(!result.value("ok").toBool()) {stop(result.value("error").toString());return;}
+#ifdef INK_PAPER_PRO_SINGLE_CAPTURE
+                    // Explicit owner-authorized trial: no second suppression/capture.
+                    // Still validate visible native UI/page/template/viewport immediately.
+                    if(!liveValid()) {stop("Page changed before single-capture insertion");return;}
+                    const auto inserted=workflow::run({{"op","insert"}});
+                    if(!inserted.value("ok").toBool()) {stop(inserted.value("error").toString());return;}
+                    admission_->finish();
+                    stop("Live text inserted (single capture); verify placement and Undo/Redo");
+#else
+                    stage_=Stage::BeforeSecond; pause_.restart();message_="Answer rendered; Cancel available";
+#endif
+                }
+#ifdef INK_PAPER_PRO_DEMO_HOST_TEST
+                ,testManager_,testApiTimeoutMs_
+#endif
+            );
+            key_.clear();
+#else
+            stage_=Stage::BeforeSecond; pause_.restart(); message_="Fixture rendered; Cancel still available";
+#endif
+        }
+    }
+#ifdef INK_PAPER_PRO_LIVE_TEST
+    bool liveValid() {
+        return busy_ && stage_==Stage::AwaitAnswer && workflow::fresh(workflow::current()) &&
+            admission_ && admission_->visibleBoundary(viewport(workflow::current())).isEmpty();
+    }
+    QPointer<paperProLive::Client> client_;
+    QString key_,configPath_="/home/root/.config/remarkable-ai-ferrari/config.json";
+#ifdef INK_PAPER_PRO_DEMO_HOST_TEST
+    QNetworkAccessManager *testManager_=nullptr;
+    int testApiTimeoutMs_=120000;
+#endif
+#endif
+    QTimer timer_; QElapsedTimer clock_,pause_,readyDelay_;
+    int pauseMs_=1500,settleMs_=300,captureTimeoutMs_=10000,overallTimeoutMs_=
+#ifdef INK_PAPER_PRO_LIVE_TEST
+        150000;
+#else
+        30000;
+#endif
+    QPointer<DiaryCaptureUiSession> lease_;
+#ifdef INK_PAPER_PRO_PER_REQUEST
+    std::unique_ptr<paperProSession::ToolbarLease> toolbarLease_;
+#endif
+    LivePose native_; std::unique_ptr<Admission> admission_;
+    Stage stage_=Stage::Idle; bool busy_=false,started_=false,ready_=false,captureSecond_=false;
+    QString message_=
+#ifdef INK_PAPER_PRO_PER_REQUEST
+            "Ready: Ferrari notebook";
+#elif defined(INK_PAPER_PRO_LIVE_TEST)
+        "Live text: config and new reviewed reference required";
+#else
+        "Awaiting reviewed offline reference";
+#endif
+};
+QPointer<Runtime> runtime;
+}
+#ifdef INK_PAPER_PRO_LIVE_TEST
+extern "C" char *ink_diary_paper_pro_live(
+#else
+extern "C" char *ink_diary_paper_pro_demo(
+#endif
+const char *value) {
+    QJsonObject out{{"ok",false},{"error","unsupported-runtime"}};
+    auto *app=QCoreApplication::instance();
+    if (diagnostic::allowed() && app) {
+        const QByteArray command=value?QByteArray(value):QByteArray();
+        auto job=[command,app] {
+            QJsonObject out;
+            if (command=="inspect") return diagnostic::collect(true);
+#ifdef INK_PAPER_PRO_PER_REQUEST
+            if (command=="calibration-preview") return paperProRuntime::calibrationPreview(
+                paperProRuntime::runtime && paperProRuntime::runtime->status().value("busy").toBool());
+#endif
+            if (!paperProRuntime::runtime) paperProRuntime::runtime=new paperProRuntime::Runtime(app);
+            if (command=="start") paperProRuntime::runtime->start();
+            else if (command=="cancel") paperProRuntime::runtime->cancel();
+            else if (command!="status") return diaryDispatch::error("unsupported-command");
+            return paperProRuntime::runtime->status();
+        };
+        out=diaryDispatch::run(std::move(job));
+    }
+    return strdup(QJsonDocument(out).toJson(QJsonDocument::Compact).constData());
+}

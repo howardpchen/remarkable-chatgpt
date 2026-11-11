@@ -1,0 +1,309 @@
+import QtQuick 2.15
+import net.asivery.XoviMessageBroker 2.0
+
+// Keep the exact 360×176 capture-owner boundary; draw a tighter card inside it.
+// Text answer backend only. No on-load Start.
+Item {
+    id: moveUiProbe
+    objectName: "moveUiProbe"
+    z: 10000
+    // Retain the document bridge while visually parenting the widget to the
+    // reading-space SceneView. No request is started by this UI-only setup.
+    property var diaryDocumentRoot: null
+    Component.onCompleted: {
+        diaryDocumentRoot = parent;
+        if (diaryDocumentRoot && diaryDocumentRoot.diaryNativePoseObjects &&
+            diaryDocumentRoot.diaryNativePoseObjects.sceneView)
+            parent = diaryDocumentRoot.diaryNativePoseObjects.sceneView;
+    }
+    anchors.right: parent ? parent.right : undefined
+    anchors.bottom: parent ? parent.bottom : undefined
+    anchors.margins: 16
+    property bool controlsExpanded: false
+    function restartIdleCollapse() {
+        idleCollapse.stop();
+        if (controlsExpanded && !demoBusy && visible) idleCollapse.start();
+    }
+    onControlsExpandedChanged: restartIdleCollapse()
+    onVisibleChanged: restartIdleCollapse()
+    Timer {
+        id: idleCollapse
+        objectName: "moveUiIdleCollapse"
+        interval: 3000
+        repeat: false
+        onTriggered: {
+            if (!moveUiProbe.demoBusy) moveUiProbe.controlsExpanded = false;
+        }
+    }
+    readonly property bool panelExpanded: controlsExpanded || demoBusy
+    width: parent ? Math.max(0, Math.min(panelExpanded ? 360 : 72, parent.width - 32)) : 0
+    height: panelExpanded ? 176 : 72
+    readonly property string diaryCaptureOwner: "ink-diary-owned-control-v1"
+    property bool diaryCaptureSuppressed: false
+    property bool diaryRequestToolbarSuppressed: false
+    // Reuse the exact lexical bridge; the scoped Bindings below restore
+    // the original native visibility binding/value, not an imperative overwrite.
+    // Unknown/missing state must not offer dismissal without a recovery signal.
+    readonly property var nativeToolbar: (diaryDocumentRoot !== null &&
+        typeof diaryDocumentRoot.diaryNativePoseObjects !== "undefined" && diaryDocumentRoot.diaryNativePoseObjects &&
+        typeof diaryDocumentRoot.diaryNativePoseObjects.toolbar !== "undefined"
+        ? diaryDocumentRoot.diaryNativePoseObjects.toolbar : null)
+    readonly property bool toolbarsHidden: (nativeToolbar !== null &&
+        typeof nativeToolbar !== "undefined" &&
+        typeof nativeToolbar.shown === "boolean" && nativeToolbar.shown === false)
+    readonly property bool nativeCaptureReady: (nativeToolbar !== null &&
+        typeof nativeToolbar.visible === "boolean" && nativeToolbar.visible === false &&
+        typeof nativeToolbar.shown === "boolean" && nativeToolbar.shown === false)
+    readonly property var nativeZoomButton: (diaryDocumentRoot !== null &&
+        diaryDocumentRoot.diaryNativePoseObjects &&
+        diaryDocumentRoot.diaryNativePoseObjects.zoomButton !== undefined
+        ? diaryDocumentRoot.diaryNativePoseObjects.zoomButton : null)
+    readonly property bool nativeRequestToolbarReady: (nativeCaptureReady &&
+        typeof nativeToolbar.expanded === "boolean" && nativeToolbar.expanded === false &&
+        nativeZoomButton !== null && typeof nativeZoomButton.visible === "boolean" &&
+        nativeZoomButton.visible === false)
+    Binding {
+        target: moveUiProbe.nativeZoomButton
+        property: "visible"
+        value: false
+        when: moveUiProbe.diaryRequestToolbarSuppressed && moveUiProbe.nativeZoomButton !== null
+        restoreMode: Binding.RestoreBindingOrValue
+    }
+    Binding {
+        target: moveUiProbe.nativeToolbar
+        property: "visible"
+        value: false
+        when: (moveUiProbe.diaryCaptureSuppressed || moveUiProbe.diaryRequestToolbarSuppressed) && moveUiProbe.nativeToolbar !== null
+        restoreMode: Binding.RestoreBindingOrValue
+    }
+    Binding {
+        target: moveUiProbe.nativeToolbar
+        property: "expanded"
+        value: false
+        when: moveUiProbe.diaryRequestToolbarSuppressed && moveUiProbe.nativeToolbar !== null
+        restoreMode: Binding.RestoreBindingOrValue
+    }
+    Component.onDestruction: {
+        // Restore a request-owned override even if the notebook/widget closes.
+        // Retain the historical capture-only destruction behavior otherwise.
+        if (diaryRequestToolbarSuppressed) {
+            diaryCaptureSuppressed = false;
+            diaryRequestToolbarSuppressed = false;
+        }
+    }
+    // Historical capture-only destruction may leave visibility hidden. A
+    // request-owned override is always released by the destruction handler.
+    property bool dismissedUntilToolbar: false
+    onToolbarsHiddenChanged: {
+        if (!toolbarsHidden) dismissedUntilToolbar = false;
+    }
+    onDemoBusyChanged: {
+        if (demoBusy) dismissedUntilToolbar = false;
+        else controlsExpanded = true; // Completion/error gets a fresh idle interval.
+        restartIdleCollapse();
+    }
+    visible: !dismissedUntilToolbar && !diaryCaptureSuppressed && parent !== null && diaryDocumentRoot !== null && diaryDocumentRoot.documentLoaded === true && parent.width >= 320 && parent.height >= 352
+    property bool demoBusy: false
+    property bool demoArmed: false
+    property int requestsRemaining: 0
+    property bool dollarBudget: false
+    property real budgetAvailable: 0
+    property real budgetReservation: 0
+    property real budgetHeld: 0
+    property real budgetSettledGuard: 0
+    property bool budgetReady: false
+    clip: true
+    XoviMessageBroker { id: demoBroker }
+    property int clicks: 0
+    property string localMessage: "Text · checking budget"
+
+    function statusLabel() {
+        var label = dollarBudget ? "AI: " + budgetAvailable.toFixed(2) : "AI";
+        if (localMessage.indexOf("inserted") >= 0) return label;
+        if (localMessage.indexOf("Thinking") === 0) return "Thinking…";
+        if (localMessage.indexOf("Live text test") === 0) return "Reading page…";
+        if (localMessage.indexOf("Cancelled;") === 0) return label;
+        if (localMessage.indexOf("Ready") === 0 || localMessage.indexOf("Text · checking") === 0 || localMessage.indexOf("Normal zoom:") === 0)
+            return label;
+        return localMessage; // Preserve actionable errors and unsupported notices.
+    }
+
+    function refreshStatus() {
+        try {
+            var result = JSON.parse(demoBroker.sendSimpleSignal("ink-diary-paper-pro-live$control", "status"));
+            moveUiProbe.requestsRemaining = result.requestsRemaining || 0;
+            moveUiProbe.dollarBudget = typeof result.budgetTotalUsd === "number";
+            moveUiProbe.budgetAvailable = result.budgetAvailableUsd || 0;
+            moveUiProbe.budgetReservation = result.budgetReservationUsd || 0;
+            moveUiProbe.budgetReady = result.budgetReady === true;
+            moveUiProbe.budgetHeld = result.budgetHeldUsd || 0;
+            moveUiProbe.budgetSettledGuard = result.budgetSettledGuardUsd || 0;
+            moveUiProbe.demoBusy = result.busy === true;
+            moveUiProbe.demoArmed = result.canStart === true;
+            moveUiProbe.localMessage = result.message || result.error || "Text answer unavailable";
+        } catch (error) {
+            moveUiProbe.localMessage = "Text answer status unavailable";
+        }
+    }
+    Timer {
+        interval: 250
+        repeat: true
+        running: moveUiProbe.visible
+        onTriggered: moveUiProbe.refreshStatus()
+    }
+
+    Rectangle {
+        id: panelCard
+        objectName: "moveUiProbeCard"
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        // Actionable notices retain the original roomy layout and text size.
+        readonly property bool detailedStatus: moveUiProbe.statusLabel().length > 20
+        width: Math.min(parent.width, moveUiProbe.panelExpanded && !detailedStatus ? 280 : parent.width)
+        height: moveUiProbe.panelExpanded && !detailedStatus ? 152 : parent.height
+        color: "white"
+        border.color: "black"
+        border.width: 1
+        radius: 12
+
+        MouseArea {
+            anchors.fill: parent
+            onPressed: idleCollapse.stop()
+            onReleased: moveUiProbe.restartIdleCollapse()
+            onCanceled: moveUiProbe.restartIdleCollapse()
+        }
+
+        Rectangle {
+            id: launcher
+            objectName: "moveUiProbeLauncher"
+            anchors.fill: parent
+            color: "white"
+            border.color: "black"
+            border.width: 2
+            radius: 8
+            visible: !moveUiProbe.panelExpanded
+            Text {
+                anchors.centerIn: parent
+                text: "AI"
+                font.pixelSize: 24
+                color: "black"
+            }
+            MouseArea {
+                anchors.fill: parent
+                onPressed: idleCollapse.stop()
+                onReleased: moveUiProbe.restartIdleCollapse()
+                onCanceled: moveUiProbe.restartIdleCollapse()
+                onClicked: moveUiProbe.controlsExpanded = true
+            }
+        }
+
+        Rectangle {
+            id: dismissButton
+            objectName: "moveUiProbeDismissButton"
+            anchors.top: parent.top
+            anchors.right: parent.right
+            anchors.margins: 8
+            width: 40
+            height: 40
+            color: "white"
+            // Keep Cancel reachable while a request is running.
+            visible: moveUiProbe.panelExpanded && moveUiProbe.toolbarsHidden && !moveUiProbe.demoBusy
+            enabled: visible
+            Text {
+                anchors.centerIn: parent
+                text: "×"
+                font.pixelSize: 30
+                color: "black"
+            }
+            MouseArea {
+                anchors.fill: parent
+                onPressed: idleCollapse.stop()
+                onReleased: moveUiProbe.restartIdleCollapse()
+                onCanceled: moveUiProbe.restartIdleCollapse()
+                onClicked: {
+                    if (moveUiProbe.toolbarsHidden && !moveUiProbe.demoBusy) {
+                        moveUiProbe.controlsExpanded = false;
+                        moveUiProbe.dismissedUntilToolbar = true;
+                    }
+                }
+            }
+        }
+
+        Rectangle {
+            id: collapseButton
+            objectName: "moveUiProbeCollapseButton"
+            anchors.top: parent.top
+            anchors.right: dismissButton.visible ? dismissButton.left : parent.right
+            anchors.margins: 8
+            width: 40
+            height: 40
+            color: "white"
+            visible: moveUiProbe.panelExpanded && !moveUiProbe.demoBusy
+            Text {
+                anchors.centerIn: parent
+                text: "−"
+                font.pixelSize: 30
+                color: "black"
+            }
+            MouseArea {
+                anchors.fill: parent
+                onPressed: idleCollapse.stop()
+                onReleased: moveUiProbe.restartIdleCollapse()
+                onCanceled: moveUiProbe.restartIdleCollapse()
+                onClicked: {
+                    if (!moveUiProbe.demoBusy) moveUiProbe.controlsExpanded = false;
+                }
+            }
+        }
+
+        Text {
+            id: probeStatus
+            visible: moveUiProbe.panelExpanded
+            objectName: "moveUiProbeStatus"
+            anchors.left: parent.left
+            anchors.right: collapseButton.visible ? collapseButton.left : parent.right
+            anchors.top: parent.top
+            anchors.margins: 12
+            height: 60
+            font.pixelSize: 22
+            wrapMode: Text.WordWrap
+            text: moveUiProbe.statusLabel()
+            color: "black"
+        }
+
+        Rectangle {
+            id: probeButton
+            visible: moveUiProbe.panelExpanded
+            objectName: "moveUiProbeButton"
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            anchors.margins: 12
+            height: panelCard.detailedStatus ? 68 : 60
+            color: (moveUiProbe.demoBusy || moveUiProbe.demoArmed) ? "black" : "white"
+            border.color: "black"
+            border.width: 1
+            radius: 10
+
+            Text {
+                anchors.centerIn: parent
+                font.pixelSize: 24
+                color: (moveUiProbe.demoBusy || moveUiProbe.demoArmed) ? "white" : "black"
+                text: moveUiProbe.demoBusy ? "Cancel" : (moveUiProbe.demoArmed ? "Start" : (moveUiProbe.dollarBudget && moveUiProbe.budgetReady && moveUiProbe.budgetAvailable < moveUiProbe.budgetReservation ? "Budget reached" : "Setup needed"))
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                onPressed: idleCollapse.stop()
+                onReleased: moveUiProbe.restartIdleCollapse()
+                onCanceled: moveUiProbe.restartIdleCollapse()
+                enabled: moveUiProbe.demoBusy || moveUiProbe.demoArmed
+                onClicked: {
+                    moveUiProbe.clicks += 1;
+                    demoBroker.sendSimpleSignal("ink-diary-paper-pro-live$control", moveUiProbe.demoBusy ? "cancel" : "start");
+                    moveUiProbe.refreshStatus();
+                }
+            }
+        }
+    }
+}

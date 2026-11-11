@@ -1,7 +1,9 @@
 # Experimental Move package setup
 
 This is not general reMarkable support. Only Chiappa / OS 3.28.0.172 / Qt 6.10.3,
-portrait 954×1696, normal zoom and Blank/Dots small/Grid small are validated.
+portrait 954×1696 with Blank/Dots small/Grid small, plus experimental Blank
+landscape and bounded zoom/pan. Numeric checks do not prove live zoomed requests;
+Grid/Dots landscape remain refused. See the source MOVE-ZOOM/MOVE-LANDSCAPE docs.
 The known historical shutdown issue is not claimed resolved by packaging.
 
 ## Install and manual migration
@@ -66,3 +68,7 @@ the paired rollback artifacts and matching profile; never restore/reset old usag
 provider metadata, policy, calibration and spending records remain. Key removal
 is a separate explicit CLI action before uninstall, if wanted. The app's local
 $5 guard is not an OpenAI account-wide or provider-enforced billing cap.
+
+Required `Caveat.ttf` and `DejaVuSansMono.ttf` remain separately provisioned
+private-state assets from the licensed source `fonts/` directory. No package
+owns or replaces them. Missing assets/profile/policy must fail closed.

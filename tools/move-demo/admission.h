@@ -33,7 +33,7 @@ inline constexpr const char *attemptDirectory = "/home/root/xovi/move-demo-captu
 inline constexpr const char *attemptMarker = "START_CONSUMED";
 inline constexpr const char *evidenceProfile = "chiappa-3.28.0.172-qt6.10.3-probe360x176-left-pose-v1";
 
-// Backend must verify the exact machine/OS/Qt tuple, actual Blank template,
+// Backend must verify the exact machine/OS/Qt tuple, template identity only for historical one-shot builds,
 // and obtain native toolbar + overlay state from the actual live GUI,
 // not config/JSON assertions. No permissive/default implementation is supplied.
 // See README for the precise missing resource query and rejection requirements.
@@ -162,7 +162,7 @@ private:
         auto error=inspectOwnControl(window_,suppressed);
         if (!error.isEmpty()) return error;
         try {diaryExperimentalMoveMapping(viewport,reference_);}
-        catch (...) {return "viewport-not-exact-reviewed-blank-reference";}
+        catch (...) {return "viewport-not-exact-reviewed-reference";}
         if (!native_) return "live-native-pose-source-required";
         return native_->verifyLivePose(window_,diaryMoveBoundedCaptureArea(window_->size()),suppressed);
     }

@@ -2,7 +2,9 @@
 
 Only reMarkable Paper Pro **Ferrari**, OS 3.28.0.172 / Qt 6.10.3.
 Not Chiappa (Paper Pro Move), rM2 or arbitrary future firmware. This package
-has local synthetic lifecycle validation only, not live Vellum validation.
+has synthetic lifecycle validation and one scoped live Ferrari r2 migration/
+activation check. Loaded modules and library/status/framebuffer passed; live
+notebook expanded-panel/capture/insertion/provider checks are separate.
 
 ## Identity and prerequisites
 
@@ -14,14 +16,24 @@ Private state: `/home/root/xovi/paper-pro-session-portrait-v1`.
 
 This is not turnkey provisioning. Independently review the complete device profile,
 module/QMD/resource fingerprints and required dependency file manifest at the
-final installed paths. Existing manual runtime paths are not package paths.
-Calibrate each template/direction independently; never import a Move profile.
+final installed paths. Existing manual runtime paths are not package-owned files. The current runtime
+manifest guard enumerates its fixed isolated activation directory, not the
+global extension directory. Preserve that guard: retain the manual directory
+in inactive rollback storage, then populate its original path with explicit
+symlinks to the five reviewed package-owned modules and the AI QMD/hashtab.
+Keep unrelated installed mods outside this filtered load view, as before. The
+profile must retain the guarded activation paths with hashes reviewed against
+the actual package-owned targets; do not disable path/set/hash checks. The
+offline CLI may likewise be linked to its package-owned location.
+Calibrate each Ferrari orientation/direction independently; never import a Move
+profile. Native-bounds placement does not require template pitch. Existing explicit
+per-template pose records remain honored and must be internally valid.
 The app requires `Caveat.ttf` and `DejaVuSansMono.ttf` in its private state
 folder, provisioned separately from the source repository's licensed `fonts/`
 assets. The installer never owns or replaces anything in private state.
 Missing fonts/profile/policy must fail closed; installing or setting a key does
-not fund the app. Current runtime supports portrait Blank/Dots small/Grid small,
-and separately calibrated Blank/Dots small/Grid small CW/CCW landscape, with
+not fund the app. This locally prepared runtime uses template-independent native content bounds
+in portrait and independently calibrated CW/CCW landscape, with
 bounded zoom/pan. Local test coverage is not real placement validation.
 
 ## Migration, upgrade and removal

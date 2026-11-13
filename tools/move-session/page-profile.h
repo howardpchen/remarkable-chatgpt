@@ -63,12 +63,12 @@ inline QJsonObject oppositeLandscapePose(QJsonObject pose,const DiaryMoveFrame &
 inline QJsonObject oppositeLandscapeReference(QJsonObject selected,const QJsonObject &current) {
     auto normal=selected.value("viewport").toObject();
     const auto base=diaryMoveFrame(normal),live=diaryMoveFrame(current);
-    // Do not infer arbitrary rotations, portrait support or patterned templates.
+    // Do not infer arbitrary rotations or portrait support. Template artwork
+    // is irrelevant to this native-bounds placement calibration.
     // Both exact four-corner maps and the composed reading axes must agree.
     if(base.reading!=QSize(1696,954) || base.physical!=QSize(954,1696) ||
        live.reading!=base.reading || live.physical!=base.physical ||
        (base.degrees!=90 && base.degrees!=270) || (live.degrees+180)%360!=base.degrees ||
-       normal.value("templateName")!="Blank" || current.value("templateName")!="Blank" ||
        diaryMoveReadingAxes(normal).degrees!=0 || diaryMoveReadingAxes(current).degrees!=0)
         throw std::runtime_error("Calibrated landscape half-turn required");
     const auto raw=diaryMoveAxes(normal.value("points").toArray());

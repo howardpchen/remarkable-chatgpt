@@ -8,7 +8,7 @@
 #include "../../src/capture-layout.h"
 #include "../../src/layout.h"
 #ifdef INK_MOVE_PER_REQUEST
-#include "../../src/move-template-ink.h"
+#include "../move-session/native-placement.h"
 #endif
 #include "../../src/markdown.h"
 #include <QDir>
@@ -86,17 +86,18 @@ Page current() {
     if(windows!=1 || documents!=1 || views!=1 || p.truncated)return {};
     return p;
 }
+#ifdef INK_MOVE_PER_REQUEST
+// GUI-thread snapshots live for one request; equal-envelope edits can evade
+// comparison. Keep page/native-pose and (where configured) pixel checks too.
+QJsonObject originContent;
+QString originPlacementGeometry;
+#endif
 int placementInkRow(const QImage &image) {
 #ifdef INK_MOVE_PER_REQUEST
-    const auto p=current();
-    if(!p.view || !p.document)return image.height()-1;
-    const auto name=diaryMetadata::captureTemplateName(qmlEngine(p.view),p.document);
-    const auto snap=diagnostic::viewportSnapshot(qmlEngine(p.view),p.view);
-    const auto points=snap.value("points").toArray();
-    if(points.size()!=3)return image.height()-1;
-    const double scale=diaryMoveAxes(points).scale;
-    try {return moveTemplateInk::lastRow(image,name,scale);}
-    catch(const std::exception &) {return image.height()-1;} // no placement space on uncertainty
+    try {
+        const auto viewport=QJsonDocument::fromJson(originPlacementGeometry.toUtf8()).object();
+        return diaryNativePlacement::lastRow(originContent,diaryMoveReadingAxes(viewport),image.height());
+    } catch (...) {return image.height()-1;}
 #else
     return lastInkRow(image);
 #endif
@@ -175,7 +176,11 @@ bool fresh(const Page &p) {
     return p.window && p.window==originWindow && p.document==originDocument &&
         p.controller==originController && p.view==originView && p.id==originId &&
         p.window->size()==originSize && p.window->devicePixelRatio()==1 &&
-        geometry(p)==originGeometry;
+        geometry(p)==originGeometry
+#ifdef INK_MOVE_PER_REQUEST
+        && diaryContentBounds::detect(p.controller)==originContent
+#endif
+        ;
 }
 QJsonObject startCapture(const QString &name,Phase next) {
     const QString path=base+name;
@@ -229,6 +234,11 @@ QJsonObject run(const QJsonObject &request) {
         if(!QDir().mkpath(base) || !QFile::setPermissions(base,QFileDevice::ReadOwner|QFileDevice::WriteOwner|QFileDevice::ExeOwner))return fail("private-directory-failed");
         // Existing run artifacts are never overwritten or treated as fresh.
         for(const auto &name:{"/question.png","/check.png","/answer.png"})if(QFile::exists(base+name))return fail("existing-run-artifacts");
+#ifdef INK_MOVE_PER_REQUEST
+        originContent=diaryContentBounds::detect(p.controller);
+        if(!originContent.value("ok").toBool())return fail("native-content-bounds-unavailable");
+        originPlacementGeometry=g;
+#endif
         originSize=p.window->size();originWindow=p.window;originDocument=p.document;originController=p.controller;
         originView=p.view;originId=p.id;originGeometry=g;phase=Phase::Prepared;
         return {{"ok",true},{"prepared",true},{"fixtureOnly",fixtureOnly}};
@@ -285,7 +295,11 @@ QJsonObject run(const QJsonObject &request) {
 #endif
         #ifdef INK_MOVE_LIVE_TEST
         if(readQuestion) {
-            if(placementInkRow(cropped)<0){phase=Phase::Cancelled;return fail("no-visible-ink");}
+            const int last=placementInkRow(cropped);
+            if(last<0){phase=Phase::Cancelled;return fail("no-visible-ink");}
+#ifdef INK_MOVE_PER_REQUEST
+            if(last>=cropped.height()-45){phase=Phase::Cancelled;return fail("answer-does-not-fit-visible-crop");}
+#endif
             question=cropped; phase=Phase::AwaitingAnswer;
             return {{"ok",true}};
         }

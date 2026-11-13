@@ -30,7 +30,7 @@ assert any(k.startswith('.SIGN.RSA.') for k in controls),'Missing signature'
 assert set(controls)-{'.PKGINFO'}=={k for k in controls if k.startswith('.SIGN.RSA.')},'Lifecycle scripts or unexpected control data'
 info=controls['.PKGINFO'].decode();assert 'pkgname = '+name+'\n' in info
 assert 'depend = '+('rmpp' if ferrari else 'rmppm')+'\n' in info
-assert 'depend = remarkable-os=3.28.0.172\n' in info
+assert 'depend = remarkable-os=3.28.0.172-r0\n' in info
 for dst,src in expected.items():
  if src:assert files[dst]==(a.input/src).read_bytes(), dst+' differs from prepared input'
  else:assert files[dst]==b'https://github.com/howardpchen/remarkable-chatgpt\n'

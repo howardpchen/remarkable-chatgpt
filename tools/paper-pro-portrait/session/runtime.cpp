@@ -4,6 +4,7 @@
 #define INK_PAPER_PRO_DEMO
 #include "workflow.cpp"
 #include "admission.h"
+#include "content-bounds.h"
 #include "../../../src/capture-ui.h"
 #include <memory>
 #ifdef INK_PAPER_PRO_PER_REQUEST
@@ -19,8 +20,7 @@
 namespace paperProRuntime {
 inline QJsonObject viewport(const workflow::Page &page) {
     auto *doc=qobject_cast<QQuickItem *>(page.document);
-    const auto name=diaryMetadata::captureTemplateName(qmlEngine(doc),doc);
-    if (name.isEmpty()) return {};
+    const auto name=diaryMetadata::templateIdentity(qmlEngine(doc),doc);
     auto out=diagnostic::viewportSnapshot(qmlEngine(page.view),page.view);
     if (!out.isEmpty()) out.insert("templateName",name);
     return out;
@@ -42,7 +42,7 @@ public:
         const auto p=workflow::current();
         if (p.window!=window || crop!=diaryPaperProBoundedCaptureArea(window->size())) return "native-window-or-crop-changed";
         auto *doc=qobject_cast<QQuickItem *>(p.document);
-        if (diaryMetadata::captureTemplateName(qmlEngine(doc),doc).isEmpty()) return "supported-template-required";
+
         const auto pose=diagnostic::nativePose(doc);
         if (!pose.value("ok").toBool() || pose!=reference.value(
 #ifdef INK_PAPER_PRO_LIVE_TEST
@@ -225,7 +225,7 @@ public:
         try {
             native_.reference=paperProSession::referenceForStart(
                 paperProSession::loadProfile(workflow::sessionRoot+"/device-profile.json"),viewport(p));
-            workflow::placementReference=native_.reference;
+
         } catch(const std::exception &e) {stop(QString::fromUtf8(e.what()));return;}
 #else
         QFile file(workflow::base+"/reviewed-reference.json");
@@ -452,7 +452,7 @@ private:
     Stage stage_=Stage::Idle; bool busy_=false,started_=false,ready_=false,captureSecond_=false;
     QString message_=
 #ifdef INK_PAPER_PRO_PER_REQUEST
-            "Ready: Ferrari notebook";
+            "Ready: native content bounds";
 #elif defined(INK_PAPER_PRO_LIVE_TEST)
         "Live text: config and new reviewed reference required";
 #else
@@ -474,6 +474,11 @@ const char *value) {
         auto job=[command,app] {
             QJsonObject out;
             if (command=="inspect") return diagnostic::collect(true);
+            if (command=="content-detection") return diaryContentBounds::detect(workflow::current().controller);
+            if (command=="content-bounds") {
+                const auto page=workflow::current();
+                return diaryContentBounds::read(page.controller);
+            }
 #ifdef INK_PAPER_PRO_PER_REQUEST
             if (command=="calibration-preview") return paperProRuntime::calibrationPreview(
                 paperProRuntime::runtime && paperProRuntime::runtime->status().value("busy").toBool());

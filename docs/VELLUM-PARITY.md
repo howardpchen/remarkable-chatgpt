@@ -1,46 +1,53 @@
-# Ferrari / Chiappa packaging checkpoint
+# Ferrari / Chiappa native-bounds parity
 
-Prepared locally on 2026-11-11. No tablet operation or provider call.
+## Beta2 feature matrix
 
-| Capability | Ferrari / full-size Paper Pro | Chiappa / Paper Pro Move |
+| Capability | Chiappa / Move | Ferrari / Paper Pro |
 |---|---|---|
-| Package | remarkable-ai-ferrari | remarkable-ai-move |
-| Model dependency | rmpp | rmppm |
-| Exact SDK | Ferrari3.28.0.172 Qt6.10.3 | Chiappa3.28.0.172 Qt6.10.3 |
-| Offline key/status CLI | remarkable-ai-ferrari | remarkable-ai |
+| Product/firmware | Chiappa3.28.0.172 / Qt 6.10.3 | Ferrari3.28.0.172 / Qt 6.10.3 |
+| Physical framebuffer |954×1696 |1620×2160 |
+| Landscape reading view |1696×954 |2160×1620 |
+| Package | remarkable-ai-move | remarkable-ai-ferrari |
+| Native item/root-text/aggregate envelope | yes | yes |
+| Template-only per-request admission | removed | removed |
+| Native-envelope projection / 45px gap /fit | yes | yes |
+| Frozen bounds/page/object/viewport checks | yes | yes |
+| Bounded50–400% zoom/pan | calibrated orientation | calibrated orientation |
+| Landscape anchor | reviewed half-turn derivation | independent CW/CCW; never infer opposite |
+| Request capture | single (known edit-detection limitation) | dual, retaining pixel comparison |
 | Start/Cancel,800 tokens,no retries | yes | yes |
-| Preserved conservative dollar ledger | yes | yes |
-| Portrait Blank/Dots small/Grid small | yes, separate profiles | yes, separate profiles |
-| Bounded zoom/pan | yes | yes |
-| Landscape templates | Blank/Grid/Dots, independent CW/CCW profiles | experimental calibrated Blank only |
-| Zoom-aware bounded dot filtering | current shared detector | current shared detector |
-| Signed local APK / upgrade / removal | synthetic verified | synthetic verified |
-| Real tablet Vellum install/upgrade/remove | not tested | not tested |
+| Persistent conservative dollar ledger | yes | yes |
+| Existing reservation per request |$0.25421 |$0.10 |
+| Offline key/status CLI | remarkable-ai | remarkable-ai-ferrari |
+| Package hooks/funding/private data | none | none |
 
-Parity here means equivalent packaging and guarded workflow, not identical
-hardware coverage. Do not enable Move patterned landscape or another turn by
-copying Ferrari records; new native geometry, exact resources, per-direction
-calibration and regression tests are required. Real zoomed-dot placement after
-the last Ferrari fix remains owner-unverified. Grid rules thicker than4 pixels
-remain a conservative false-ink risk on both; no masking limit was widened.
-Move single-capture mode retains its known same-page-new-ink limitation.
+Feature parity means the same template-independent placement semantics and
+package guarantees, not identical hardware, calibration, capture strategy or
+universal content coverage. Ferrari retains its independent native bridge and
+private state. Existing Ferrari explicit template-pose records are honored;
+no native-pose guard or orientation calibration is removed.
 
-## Local checks
+## Validation boundary
 
-Fresh exact-SDK builds, host runtime/profile/template-ink/native-pose/budget
-suites, offline CLI tests and production UI suites passed. Signed APK solver
-checks reject wrong firmware/model and preserve synthetic private state through
-install/upgrade/remove. Payload audit checks six generic files and no hooks,
-links, unexpected private paths or resource dumps. r1 is solely an upgrade-test
-release of the r0 payload. No full hardware or external dependency-ABI guarantee.
+The owner confirmed Chiappa ruled-template placement without overlap and native
+Undo/Redo/reopen in an earlier focused module. The cleaned beta2 module/package
+is a fresh build; that prior sample is not validation of every package/view.
+Ferrari native-bounds code remains local-only; prior pixel-detector hardware
+checks do not validate this method. Native rM2 remains unchanged.
 
-## Remaining before real use
+## Completed local release checks
 
-Follow the device-specific setup document. Both packages intentionally need
-separately provisioned licensed fonts, reviewed profile/file/resource fingerprints
-and owner-funded policy. No credentials, calibration or data are bundled.
-Migration from manual isolated runtime must review the new installed paths and
-avoid double-loading mods. Historical shutdown instability remains unresolved.
-Next live phase needs explicit scoped approval, library readiness, rollback,
-trusted signing setup, clean migration, loaded-resource and dependency checks,
-then real placement/Undo/Redo/reopen. Publication is separately authorized.
+- Exact isolated publication-tree builds passed for both device AArch64 SDKs.
+- Chiappa: 78 request scenarios in each capture mode, actual QML/widget, native
+  projection, bounds/profile/budget checks passed. Ferrari: 96 request scenarios,
+  native geometry/profile/pose and budget-policy checks passed.
+- Historical offline runtime/widget and core capture/mapping checks passed.
+- Both signed beta2 r0/r1 pairs passed payload audits and real APK solver
+  install/upgrade/removal with synthetic private state byte-identical and wrong
+  model/firmware refused. Six generic files per payload; no hooks or private data.
+- CLI tests use synthetic keys/temporary state only; no provider or tablet calls.
+
+Live Vellum migration/expanded-view placement and
+Ferrari native-bounds response tests require separate scoped authority.
+See [checkpoint](PROJECT-STATUS.md), [design](NATIVE-BOUNDS-PLACEMENT.md) and
+[packaging](../packaging/vellum/README.md).

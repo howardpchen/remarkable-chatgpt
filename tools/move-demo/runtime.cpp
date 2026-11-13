@@ -7,6 +7,7 @@
 #include "../../src/capture-ui.h"
 #include <memory>
 #ifdef INK_MOVE_PER_REQUEST
+#include "../move-session/content-bounds.h"
 #include "../move-session/quota.h"
 #include "../move-session/page-profile.h"
 #include "../move-session/toolbar-lease.h"
@@ -19,8 +20,14 @@
 namespace moveDemo {
 inline QJsonObject viewport(const workflow::Page &page) {
     auto *doc=qobject_cast<QQuickItem *>(page.document);
+#ifdef INK_MOVE_PER_REQUEST
+    // Optional, value-free identity metadata is frozen for change detection;
+    // it must never decide whether native-bounds placement supports a template.
+    const auto name=diaryMetadata::templateIdentity(qmlEngine(doc),doc);
+#else
     const auto name=diaryMetadata::captureTemplateName(qmlEngine(doc),doc);
     if (name.isEmpty()) return {};
+#endif
     auto out=diagnostic::viewportSnapshot(qmlEngine(page.view),page.view);
     if (!out.isEmpty()) out.insert("templateName",name);
     return out;
@@ -42,7 +49,9 @@ public:
         const auto p=workflow::current();
         if (p.window!=window || crop!=diaryMoveBoundedCaptureArea(window->size())) return "native-window-or-crop-changed";
         auto *doc=qobject_cast<QQuickItem *>(p.document);
+#ifndef INK_MOVE_PER_REQUEST
         if (diaryMetadata::captureTemplateName(qmlEngine(doc),doc).isEmpty()) return "supported-template-required";
+#endif
         const auto pose=diagnostic::nativePose(doc);
         if (!pose.value("ok").toBool() || pose!=reference.value(
 #ifdef INK_MOVE_LIVE_TEST
@@ -451,7 +460,7 @@ private:
     Stage stage_=Stage::Idle; bool busy_=false,started_=false,ready_=false,captureSecond_=false;
     QString message_=
 #ifdef INK_MOVE_PER_REQUEST
-        "Ready: Blank, Dots small or Grid small";
+        "Ready: native content bounds";
 #elif defined(INK_MOVE_LIVE_TEST)
         "Live text: config and new reviewed reference required";
 #else
@@ -474,6 +483,11 @@ const char *value) {
             QJsonObject out;
             if (command=="inspect") return diagnostic::collect(true);
 #ifdef INK_MOVE_PER_REQUEST
+            if (command=="content-detection") return diaryContentBounds::detect(workflow::current().controller);
+            if (command=="content-bounds") {
+                const auto page=workflow::current();
+                return diaryContentBounds::read(page.controller);
+            }
             if (command=="calibration-preview") return moveDemo::calibrationPreview(
                 moveDemo::runtime && moveDemo::runtime->status().value("busy").toBool());
 #endif

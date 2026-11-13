@@ -58,22 +58,15 @@ inline bool diaryExperimentalPaperProTuple(const QByteArray &machine, const QByt
 }
 inline DiaryPaperProMapping diaryExperimentalPaperProMapping(const QJsonObject &snapshot,
                                                       const QJsonObject &normalReference) {
-    // Factory identity is read-only; historical one-shot builds stay Blank-only.
-    // A separately provisioned exact normal reference is still mandatory.
-    const auto name=snapshot.value("templateName").toString();
-    const bool supported=name==QLatin1String("Blank")
-#ifdef INK_PAPER_PRO_PER_REQUEST
-        || name==QLatin1String("P Dots S") || name==QLatin1String("P Grid small")
+    // Template pixels no longer participate in native-envelope placement.
+#ifndef INK_PAPER_PRO_PER_REQUEST
+    if(snapshot.value("templateName").toString()!=QLatin1String("Blank"))
+        throw std::runtime_error("Historical one-shot requires Blank");
 #endif
-        ;
-    if (!supported ||
-        normalReference.isEmpty() || snapshot != normalReference ||
-        snapshot.value("devicePixelRatio").toDouble(0) != 1)
-        throw std::runtime_error("Supported template and normal Move viewport required");
-    const auto size=diaryPaperProViewportSize(snapshot);
-    // Per-request profile admission supplies independently reviewed orientation/
-    // template pitch and poses; this numeric validator never grants calibration.
-    // Historical non-per-request builds remain portrait/Blank only.
+    if(normalReference.isEmpty() || snapshot!=normalReference ||
+       snapshot.value("devicePixelRatio").toDouble(0)!=1)
+        throw std::runtime_error("Exact frozen Ferrari viewport at DPR 1 required");
+    diaryPaperProViewportSize(snapshot);
     const auto points=snapshot.value("points").toArray();
     if (points.size()!=3) throw std::runtime_error("Move mapping requires three calibration points");
     const auto axes=diaryPaperProAxes(points);

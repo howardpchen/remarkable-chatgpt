@@ -11,11 +11,26 @@ For request-scoped native toolbar hiding, read `docs/MOVE-TOOLBAR-AUTOHIDE.md`.
 - This checkout is the source of truth. Keep native rM2 support separate from the
   experimental Move implementation in `tools/move-session/`.
 - Current Move support is narrow: Chiappa, portrait 954×1696, normal zoom,
-  OS 3.28.0.172 / Qt 6.10.3, Blank/Dots small/Grid small, text answers only.
-- Paper Pro portrait work is separate local preparation in
-  `tools/paper-pro-portrait/` and the explicit Ferrari diagnostic build. Its
-  physical/logical mapping, native resources and runtime remain unvalidated;
-  never substitute Move profiles, SDKs, packaging or private state.
+  OS 3.28.0.172 / Qt 6.10.3, text answers only. Owner requested removing
+  template-only admission for native-bounds Move placement; local correction
+  accepts arbitrary/missing template metadata. Preserve calibrated geometry and
+  all native-pose/capture/page guards; broader content coverage is unverified.
+  See `docs/NATIVE-BOUNDS-PLACEMENT.md` and current deployment checkpoint.
+- Ferrari / full-size Paper Pro remains separate in `tools/paper-pro-portrait/`.
+  Native-bounds feature parity may share product-neutral geometry only; keep its
+  exact SDK, independent orientation/native-pose anchors, packaging, resources
+  and private state separate. New Ferrari native-bounds hardware remains unvalidated.
+- Experimental Blank landscape is installed and calibrated on this Move; see
+  `docs/MOVE-LANDSCAPE.md`. Its reading view is 1696×954 within a physical
+  954×1696 framebuffer. Real landscape capture/API/native insertion is untested;
+  do not claim end-to-end validation. The local native-bounds correction removes
+  the old Grid/Dots landscape template-only refusal, not orientation calibration
+  or geometry/native-pose checks; its deployment status is in PROJECT-STATUS.md.
+- Variable zoom/pan in both orientations is installed/runtime-verified; no-API
+  numeric notebook zoom/pan and baseline restoration checks passed in both
+  orientations; real zoomed capture/API/native insertion remain untested;
+  see `docs/MOVE-ZOOM.md`. Keep existing calibrated orientations/native poses
+  and freeze the live transform throughout each request.
 - Preserve the exact 360×176 capture-owner boundary even when the visible widget
   is narrower. Do not weaken native-pose, page-change or capture admission guards.
 - Preserve the dollar ledger, conservative reservations, prompt caching, 800

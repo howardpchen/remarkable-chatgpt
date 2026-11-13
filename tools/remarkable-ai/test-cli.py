@@ -2,6 +2,10 @@
 """No network or real credentials: exercise CLI policy, persistence and a real TTY."""
 import hashlib,json,os,pathlib,pty,select,subprocess,sys,tempfile,time
 binary=str(pathlib.Path(sys.argv[1]).resolve())
+# Each product retains its existing conservative reservation; testing parity
+# must not silently replace Ferrari's policy with the Move amount.
+reservation=float(sys.argv[2]) if len(sys.argv)>2 else .25421
+assert 0 < reservation <= 5
 key='synthetic_key_NOT_A_CREDENTIAL'
 keyid=hashlib.sha256(key.encode()).hexdigest()[:16]
 cases=0
@@ -26,7 +30,7 @@ with tempfile.TemporaryDirectory() as tmp:
     d=status();assert d['allowance']['availableUsd']==5 and d['allowance']['canAffordNextRequest']
     for i in range(1,5):(state/str(i)).mkdir(mode=0o700)
     d=status();assert d['allowance']['attempts']==4 and d['allowance']['unsettledAttempts']==4
-    assert abs(d['allowance']['availableUsd']-(5-4*.25421))<1e-9
+    assert abs(d['allowance']['availableUsd']-(5-4*reservation))<1e-9
     cost=state/'1'/'BUDGET_COST';cost.write_text('1000000\n');cost.chmod(0o600)
     d=status();assert d['allowance']['unsettledAttempts']==3
     cost.write_text('invalid\n');assert status()['allowance']['state']=='unavailable-or-unprovisioned'
@@ -40,9 +44,10 @@ with tempfile.TemporaryDirectory() as tmp:
     assert status()['provider']['state']=='observation-for-different-key'
     write(observation,dict(schema=1,keyId=keyid,httpStatus=401,code=key,observedAt='2026-10-27T12:00:00Z'))
     assert status()['provider']['state']=='observation-unavailable'
-    for i in range(5,22):(state/str(i)).mkdir(mode=0o700)
+    overspent_attempt=int((5-.001)//reservation)+2
+    for i in range(5,overspent_attempt+1):(state/str(i)).mkdir(mode=0o700)
     d=status();assert d['allowance']['state']=='unavailable-or-unprovisioned' # overspent ledger fails closed
-    (state/'21').rmdir()
+    (state/str(overspent_attempt)).rmdir()
     d=status();assert d['allowance']['state']=='exhausted' and not d['allowance']['canAffordNextRequest']
     saved=snapshot()
     p=subprocess.run([binary,'key','remove','--config',str(config)],capture_output=True);assert p.returncode==0

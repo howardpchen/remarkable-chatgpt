@@ -55,9 +55,9 @@ RECIPE
 REPODEST=/test/dependencies abuild -C "$work" -F -d -r all > /test/fixture-$label.log 2>&1
 SCRIPT
 chmod 755 /test/make-fixture.sh
-/test/make-fixture.sh right "$model" 3.28.0.172
-/test/make-fixture.sh wrongos "$model" 3.29.0.0
-/test/make-fixture.sh wrongmodel "$other" 3.28.0.172
+/test/make-fixture.sh right "$model" 3.28.0.172-r0
+/test/make-fixture.sh wrongos "$model" 3.29.0.0-r0
+/test/make-fixture.sh wrongmodel "$other" 3.28.0.172-r0
 # Add real signed package to synthetic platform; use actual APK solver/file ownership.
 for label in right wrongos wrongmodel; do
     root=/test/root-$label

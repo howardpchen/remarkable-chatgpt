@@ -1,9 +1,10 @@
 # Experimental Move package setup
 
 This is not general reMarkable support. Only Chiappa / OS 3.28.0.172 / Qt 6.10.3,
-portrait 954×1696 with Blank/Dots small/Grid small, plus experimental Blank
-landscape and bounded zoom/pan. Numeric checks do not prove live zoomed requests;
-Grid/Dots landscape remain refused. See the source MOVE-ZOOM/MOVE-LANDSCAPE docs.
+portrait954×1696 and independently calibrated landscape reading1696×954,
+with bounded50–400% zoom/pan. Native-bounds placement has no template-artwork
+allowlist; exact geometry/native-pose/resource admission remains mandatory.
+Numeric checks are not end-to-end validation of every expanded view.
 The known historical shutdown issue is not claimed resolved by packaging.
 
 ## Install and manual migration

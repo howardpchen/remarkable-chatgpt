@@ -8,8 +8,10 @@ case "$device" in
  ferrari) package=remarkable-ai-ferrari ;;
  *) exit 2 ;;
 esac
-: "${TEST_VERSION:=0.2.0_beta1}"
+: "${TEST_VERSION:=0.2.0_beta2}"
 : "${VELLUM_BUILDER_IMAGE:=ghcr.io/eeems/vbuild-builder@sha256:eb6117c636104b06ef9cd9036fa605620bc39ba06183d8f3e52c1caff22578d3}"
+dist=$(realpath "${VELLUM_DIST_DIR:-$PWD/build/vellum-dist}")
+signing=$(realpath "${VELLUM_SIGNING_DIR:-$PWD/build/vellum-signing}")
 mkdir -m 700 "$output"
 output=$(realpath "$output")
 docker run --rm --network=none \
@@ -18,7 +20,7 @@ docker run --rm --network=none \
  -e TEST_UPGRADE_APK="/packages/aarch64/$package-$TEST_VERSION-r1.apk" \
  -e TEST_PUBLIC_KEY=/root/.abuild/remarkable-ai-local.rsa.pub \
  --mount "type=bind,src=$output,dst=/test" \
- --mount "type=bind,src=$PWD/build/vellum-dist,dst=/packages,readonly" \
- --mount "type=bind,src=$PWD/build/vellum-signing,dst=/root/.abuild,readonly" \
+ --mount "type=bind,src=$dist,dst=/packages,readonly" \
+ --mount "type=bind,src=$signing,dst=/root/.abuild,readonly" \
  --mount "type=bind,src=$PWD/packaging/vellum/test-lifecycle.sh,dst=/lifecycle.sh,readonly" \
  "$VELLUM_BUILDER_IMAGE" sh /lifecycle.sh

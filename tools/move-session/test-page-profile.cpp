@@ -20,7 +20,8 @@ int main(int argc,char **argv) {
         auto supported=viewport;supported["templateName"]=name;
         assert(referenceForStart(profile,supported)["viewport"]==supported);
     }
-    auto wrong=viewport;wrong["templateName"]="Dots";assert(rejects(profile,wrong));
+    auto wrong=viewport;wrong["templateName"]="Dots";assert(!rejects(profile,wrong));
+    wrong=viewport;wrong.remove("templateName");assert(!rejects(profile,wrong));
     wrong=viewport;wrong["points"]=QJsonArray{QJsonArray{0,0},QJsonArray{172.1,0},QJsonArray{0,172.1}};assert(rejects(profile,wrong));
     wrong=viewport;wrong["points"]=QJsonArray{QJsonArray{0,0},QJsonArray{86,1},QJsonArray{0,86}};assert(rejects(profile,wrong));
     wrong=viewport;wrong["points"]=QJsonArray{QJsonArray{0,0},QJsonArray{86,0}};assert(rejects(profile,wrong));
@@ -48,7 +49,7 @@ int main(int argc,char **argv) {
     assert(rejects(multi,badLandscape)); // reflection
     for(const auto &name:{"P Dots S","P Grid small"}) {
         badLandscape=landscape;badLandscape["templateName"]=name;
-        assert(rejects(multi,badLandscape));
+        assert(!rejects(multi,badLandscape));
     }
     // Independent affine fixtures: zoom + pan, both reading orientations and
     // all native quarter turns; never mutate or scale the saved calibration.
@@ -83,7 +84,7 @@ int main(int argc,char **argv) {
         }
     }
     std::cout<<"PASS variable zoom: 48 orientation/turn/zoom combinations, pan, immutable anchors, bounds and request freeze\n";
-    std::cout<<"PASS orientation profiles: independent normals, quarter turns, missing calibration, DPR, shear/reflection and unmeasured templates rejected\n";
+    std::cout<<"PASS orientation profiles: independent normals, quarter turns, missing calibration, DPR/shear/reflection rejected; arbitrary/missing templates admitted\n";
     // Opposite landscape: independent synthetic expected corners, axes and
     // physical native rectangles. No second saved normal and no live pose input.
     auto normal=viewport;
@@ -122,9 +123,9 @@ int main(int argc,char **argv) {
         auto invalid=opposite;invalid["points"]=QJsonArray{QJsonArray{0,0},QJsonArray{0,step},QJsonArray{-step,0}};
         assert(rejects(saved,invalid));
     }
-    // Strictly scoped to the split Blank landscape and consistent reading axes.
+    // Strictly scoped to the calibrated split landscape and consistent reading axes.
     auto invalid=opposite;invalid["points"]=normal["points"];assert(rejects(saved,invalid));
-    invalid=opposite;invalid["templateName"]="P Grid small";assert(rejects(saved,invalid));
+    invalid=opposite;invalid["templateName"]="P Grid small";assert(!rejects(saved,invalid));
     invalid=opposite;auto corners=invalid["windowCorners"].toArray();corners[0]=QJsonArray{1,1696};invalid["windowCorners"]=corners;assert(rejects(saved,invalid));
     for(int mutation=0;mutation<5;++mutation) {
         auto badAnchor=anchor;auto badPose=pose;auto items=nativeItems;
@@ -153,5 +154,5 @@ int main(int argc,char **argv) {
     assert(file.setPermissions(QFileDevice::ReadOwner|QFileDevice::WriteOwner));
     assert(file.open(QIODevice::WriteOnly|QIODevice::Truncate));file.write("invalid-json");file.close();assert(rejectsFile(path));
     assert(file.open(QIODevice::WriteOnly|QIODevice::Truncate));file.write(QByteArray(1024*1024+1,'x'));file.close();assert(rejectsFile(path));
-    std::cout<<"PASS reusable profile: translated origins, immutable calibration, zoom bounds/template/geometry/schema rejection; missing/private/symlink/hardlink/malformed/oversized files\n";
+    std::cout<<"PASS reusable profile: translated origins, immutable calibration, zoom bounds/geometry/schema rejection; missing/private/symlink/hardlink/malformed/oversized files\n";
 }

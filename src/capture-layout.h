@@ -58,23 +58,20 @@ inline bool diaryExperimentalMoveTuple(const QByteArray &machine, const QByteArr
 }
 inline DiaryMoveMapping diaryExperimentalMoveMapping(const QJsonObject &snapshot,
                                                       const QJsonObject &normalReference) {
-    // Factory identity is read-only; historical one-shot builds stay Blank-only.
-    // A separately provisioned exact normal reference is still mandatory.
-    const auto name=snapshot.value("templateName").toString();
-    const bool supported=name==QLatin1String("Blank")
-#ifdef INK_MOVE_PER_REQUEST
-        || name==QLatin1String("P Dots S") || name==QLatin1String("P Grid small")
-#endif
-        ;
-    if (!supported ||
-        normalReference.isEmpty() || snapshot != normalReference ||
-        snapshot.value("devicePixelRatio").toDouble(0) != 1)
+    // Native-bounds per-request placement has no template artwork dependency.
+    // Historical one-shot/offline builds retain their original Blank-only gate.
+#ifndef INK_MOVE_PER_REQUEST
+    if(snapshot.value("templateName").toString()!=QLatin1String("Blank"))
         throw std::runtime_error("Supported template and normal Move viewport required");
+#endif
+    if(normalReference.isEmpty() || snapshot!=normalReference ||
+       snapshot.value("devicePixelRatio").toDouble(0)!=1)
+        throw std::runtime_error("Exact frozen Move viewport at DPR 1 required");
     const auto size=diaryMoveViewportSize(snapshot);
-    // Factory grid/dot masking is still portrait-only until landscape pitches
-    // and template identity have been measured. Blank has no template lattice.
-    if(size==QSize(1696,954) && name!=QLatin1String("Blank"))
+#ifndef INK_MOVE_PER_REQUEST
+    if(size==QSize(1696,954) && snapshot.value("templateName")!="Blank")
         throw std::runtime_error("Landscape currently requires Blank template");
+#endif
     const auto points=snapshot.value("points").toArray();
     if (points.size()!=3) throw std::runtime_error("Move mapping requires three calibration points");
     const auto axes=diaryMoveAxes(points);

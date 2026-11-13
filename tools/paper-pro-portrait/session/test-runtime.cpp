@@ -152,6 +152,7 @@ int main(int argc,char **argv) {
 #endif
     workflow::captureHandler=[&](char *argument) {
         ++captures; captureVisible |= panel->isVisible();
+        if(scenario=="native-change-capture")controller.setProperty("itemsBoundingRect",QRectF(0,400,100,100));
         if(scenario=="landscape-change-capture")window.resize(1620,2160);
         if(scenario=="landscape-split-change-capture")view.setRotation(270);
         if(scenario=="landscape-split-reverse-change-capture")view.setRotation(90);
@@ -190,6 +191,7 @@ int main(int argc,char **argv) {
     if(scenario=="shutdown-api" || scenario=="teardown-api" || scenario=="api-timeout" || scenario=="cancel-api" || scenario=="page-change-api" || scenario=="template-change-api" || scenario=="zoom-change-api" || scenario=="dots-change-api" || scenario=="landscape-change-api" || scenario=="landscape-split-change-api")manager.delay=-1;
     if(variableZoom && scenario.endsWith("change-api"))manager.delay=-1;
     if(scenario=="landscape-split-reverse-change-api")manager.delay=-1;
+    if(scenario=="native-change-api")manager.delay=-1;
     manager.onDispatch=[&]{
         if(variableZoom && scenario.endsWith("change-api"))QTimer::singleShot(10,&app,[&]{if(scenario.contains("template-change"))document.name="Blank";else view.origin+=QPointF(10,20);});
         assert(panel->isVisible()); // Own UI restored throughout API wait.
@@ -201,6 +203,7 @@ int main(int argc,char **argv) {
         if(scenario=="landscape-split-reverse-change-api")QTimer::singleShot(10,&app,[&]{view.setRotation(90);});
         if(scenario=="landscape-change-api")QTimer::singleShot(10,&app,[&]{window.resize(1620,2160);});
         if(scenario=="dots-change-api")QTimer::singleShot(10,&app,[&]{document.name="P Grid small";});
+        if(scenario=="native-change-api")controller.setProperty("itemsBoundingRect",QRectF(0,100,30,30));
         if(scenario=="same-page-ink")image.setPixelColor(450,80,Qt::black);
         const auto body=QJsonDocument::fromJson(manager.sent).object();
         const auto parts=body["input"].toArray().first().toObject()["content"].toArray();
@@ -256,7 +259,7 @@ int main(int argc,char **argv) {
         std::cout<<"PASS toolbar refusal before allocation, no stolen lease: "<<scenario.toStdString()<<"\n";
         delete panel;view.setParentItem(nullptr);delete root;return 0;
     }
-    if((landscapePattern && scenario.endsWith("-missing")) || scenario=="landscape-missing" || scenario=="landscape-split-missing" || scenario=="missing-profile" || scenario=="public-profile" || scenario=="zoomed-before-start" || scenario=="template-before-start") {
+    if(scenario=="landscape-missing" || scenario=="landscape-split-missing" || scenario=="missing-profile" || scenario=="public-profile" || scenario=="zoomed-before-start") {
         if(scenario=="missing-profile")assert(reference.remove());
         if(scenario=="public-profile")assert(reference.setPermissions(QFileDevice::ReadOwner|QFileDevice::WriteOwner|QFileDevice::ReadOther));
         if(landscapePattern && scenario.endsWith("-missing"))document.name=scenario.contains("-dots-")?"P Dots S":"P Grid small";
@@ -323,7 +326,26 @@ int main(int argc,char **argv) {
         if(scenario=="zoom-dots")document.name="P Dots S";
     }
 #endif
-    runtime.start(); assert(runtime.status()["busy"].toBool());
+#ifdef INK_PAPER_PRO_PER_REQUEST
+    if(scenario=="template-before-start")document.name="Synthetic ruled";
+    if(scenario=="template-unavailable")document.name="";
+    const auto nativeAxes=diaryPaperProReadingAxes(paperProRuntime::viewport(page));
+    auto nativeRect=QRectF(nativeAxes.map({0,0}),nativeAxes.map({1,0})).normalized();
+    if(scenario=="native-placement")nativeRect=QRectF(0,100,200,200);
+    if(scenario=="native-offscreen")nativeRect=QRectF(0,3000,200,200);
+    if(scenario.endsWith("-empty"))nativeRect={};
+    controller.setProperty("itemsBoundingRect",nativeRect);
+    controller.setProperty("boundingRect",nativeRect);
+    controller.setProperty("rootDocumentBoundingRect",QRectF());
+    if(scenario=="native-missing")controller.setProperty("boundingRect",QVariant());
+#endif
+    runtime.start();
+    if(scenario=="native-missing") {
+        assert(!runtime.status()["busy"].toBool() && captures==0 && manager.requests==0 && controller.calls==0);
+        assert(runtime.status()["message"].toString().contains("native-content-bounds-unavailable"));
+        delete panel;view.setParentItem(nullptr);delete root;return 0;
+    }
+    assert(runtime.status()["busy"].toBool());
 #ifdef INK_PAPER_PRO_PER_REQUEST
     const auto firstRequest=workflow::base;
     runtime.start(); // busy duplicate: same identity, one request, no cancellation
@@ -379,7 +401,7 @@ int main(int argc,char **argv) {
     assert(captures<=1 && !QFile::exists(workflow::base+"/check.png"));
 #endif
     assert(QFile::exists(workflow::base+"/START_CONSUMED"));
-    const bool successExpected=(variableZoom && !zoomFailure) || (landscape && !variableZoom && !scenario.contains("change-") && !scenario.contains("frame-mismatch")) || scenario=="success" || scenario=="translated-before-start" || scenario=="dots-before-start" || (scenario=="grid-before-start" || scenario=="grid-table-before-start")
+    const bool successExpected=scenario=="native-placement" || scenario=="template-before-start" || scenario=="template-unavailable" || (variableZoom && !zoomFailure) || (landscape && !variableZoom && !scenario.contains("change-") && !scenario.contains("frame-mismatch")) || scenario=="success" || scenario=="translated-before-start" || scenario=="dots-before-start" || (scenario=="grid-before-start" || scenario=="grid-table-before-start")
 #ifdef INK_PAPER_PRO_SINGLE_CAPTURE
         || scenario=="same-page-ink" || scenario=="changed-pixels"
 #endif
@@ -394,18 +416,23 @@ int main(int argc,char **argv) {
 #endif
             && nativeChecks>=5);
         assert(QFile::exists(workflow::base+"/INSERTION_CONSUMED"));
+        if(scenario=="native-placement") {
+            const double height=workflow::answer.height()/view.factor;
+            const auto expected=nativeAxes.map({120+(size.width()-120)/2.0,std::ceil(300/view.factor)+45+height/2});
+            assert(QLineF(expected,controller.lastTarget).length()<1e-6);
+        }
         if(landscape || variableZoom) {
             const auto axes=diaryPaperProReadingAxes(paperProRuntime::viewport(page));
             assert(axes.degrees==view.degrees);
             if(!variableZoom)assert(view.degrees ? workflow::answer.height()>1000 : workflow::answer.width()>1000);
             const double height=(view.degrees?workflow::answer.width():workflow::answer.height())/view.factor;
             const double x=120+(size.width()-120)/2.0;
-            const auto expected=QTransform().rotate(view.degrees).map(QPointF(x,45+(landscapePattern?154:(scenario=="zoom-grid" || scenario=="zoom-dots"?159:0))+height/2)*view.factor)+view.origin;
+            const auto expected=QTransform().rotate(view.degrees).map(QPointF(x,45+height/2)*view.factor)+view.origin;
             assert(QLineF(expected,controller.lastTarget).length()<1e-6);
         }
     } else {assert(controller.calls==0);assert(!QFile::exists(workflow::base+"/INSERTION_CONSUMED"));}
 #ifdef INK_PAPER_PRO_LIVE_TEST
-    const bool apiExpected=(variableZoom && !scenario.endsWith("change-capture")) || (landscape && !variableZoom && !scenario.contains("change-capture") && !scenario.contains("frame-mismatch")) || scenario=="success" || scenario=="translated-before-start" || scenario=="dots-before-start" || (scenario=="grid-before-start" || scenario=="grid-table-before-start") || scenario=="same-page-ink" || scenario=="changed-pixels" || scenario=="malformed" || scenario=="unsupported" || scenario=="needs-web" || scenario=="clarification" || scenario=="unknown-kind" || scenario=="too-large" || scenario=="http-error" || scenario=="api-timeout" || scenario.endsWith("-api");
+    const bool apiExpected=scenario=="native-placement" || scenario=="template-before-start" || scenario=="template-unavailable" || (variableZoom && !scenario.endsWith("change-capture")) || (landscape && !variableZoom && !scenario.contains("change-capture") && !scenario.contains("frame-mismatch")) || scenario=="success" || scenario=="translated-before-start" || scenario=="dots-before-start" || (scenario=="grid-before-start" || scenario=="grid-table-before-start") || scenario=="same-page-ink" || scenario=="changed-pixels" || scenario=="malformed" || scenario=="unsupported" || scenario=="needs-web" || scenario=="clarification" || scenario=="unknown-kind" || scenario=="too-large" || scenario=="http-error" || scenario=="api-timeout" || scenario.endsWith("-api");
     assert(manager.requests==(apiExpected?1:0));
     if(scenario=="shutdown-api" || scenario=="cancel-api" || scenario=="api-timeout" || scenario.endsWith("change-api"))assert(manager.aborts==1);
 #endif

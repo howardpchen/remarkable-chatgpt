@@ -1,46 +1,40 @@
-# reMarkable AI — Vellum Mod
+# reMarkable AI / Vellum
 
-## Objective
+## Scope
 
-Make the existing native handwritten-question assistant installable through
-Vellum, with a safe companion `remarkable-ai` CLI for local key and allowance
-management. Keep the existing plugin architecture; use Vellum's APK/VELBUILD
-conventions rather than inventing a package manager or companion service.
+A native handwritten-question assistant with separate experimental Chiappa
+(Paper Pro Move) and Ferrari (Paper Pro) runtimes and Vellum packages. Native rM2
+remains separate. Exact supported firmware is OS 3.28.0.172 / Qt 6.10.3.
 
-## Agreed design
+Both package candidates use template-independent native content bounds to place
+text responses below existing content. This is not arbitrary-device support or
+proof that every imported/image/vector item contributes complete bounds.
 
-- Package native XOVI module, QML widget, helper CLI, dependencies and exact
-  device/firmware requirements. Start with a local experimental Move package.
-- `remarkable-ai key status`: configured/missing/invalid metadata with masked
-  identity, local allowance, conservative charged/reserved amounts, whether a
-  next request fits, and last observed provider status with actionable guidance.
-- `key set`: hidden interactive entry; add/replace without changing unrelated
-  settings, calibration or spending. `key remove`: remove only the local key.
-- No API request for status or setup. Do not represent the app's local allowance
-  as an OpenAI account balance. Distinguish invalid credentials, provider billing
-  quota, temporary rate limits and exhausted local allowance.
-- Key replacement never refills the allowance. No automatic renewal, retries,
-  paid verification or package-triggered request.
-- Upgrades/removal preserve private state. Never bundle a tablet calibration or
-  credential. Setup must use separately reviewed device-specific calibration;
-  packaging is not a claim of general firmware/device compatibility.
+## Decisions
 
-## Existing implementation
+- Use Vellum's maintained vbuild/abuild pipeline; do not create a package manager.
+- Read native item, root-text and aggregate scene rectangles; freeze geometry and
+  viewport for each request. No template-pixel filtering or artwork allowlist in
+  the per-request native-bounds path. Preserve independently reviewed device poses.
+- Explicit Start/Cancel, text only, maximum 800 output tokens, conservative dollar
+  reservations/ledger, prompt caching and no automatic retries.
+- Key/status setup is offline. Key replacement does not refill allowance or prove
+  provider billing/authorization. No package-triggered provider requests.
+- Preserve private configuration, calibration, usage and prior artifacts on
+  upgrade/removal. No package lifecycle hooks or automatic xochitl restart.
+- Separate exact SDKs, binaries, model dependencies, private state and firmware
+  resources. Never exchange Ferrari and Chiappa profiles or infer Ferrari turns.
+- Only generic code/docs and synthetic tests belong in Git/packages. Device
+  resources, credentials, notebook data, reports and signing private keys stay out.
 
-`tools/move-session/`: persistent conservative $5 ledger and reusable-profile
-controller. `tools/move-live/`: configuration helper and asynchronous OpenAI
-client. `tools/move-demo/test-ui.cpp`: synthetic host UI/capture tests.
-`tools/remarkable-ai/` and `packaging/vellum/`: CLI and package work.
+## Current references
 
-## Source and distribution
+- [Checkpoint and evidence](PROJECT-STATUS.md)
+- [Remaining work](ROADMAP.md)
+- [Native placement design and limitations](NATIVE-BOUNDS-PLACEMENT.md)
+- [Per-device parity matrix](VELLUM-PARITY.md)
+- [Packaging procedure](../packaging/vellum/README.md)
 
 Repository: https://github.com/howardpchen/remarkable-chatgpt
-Working branch: `port/paper-pro-and-move`. Local commits may be ahead of remote;
-check before publication. No new publication is authorized by project registration.
-Vellum catalog acceptance is separate from building a local package.
-
-## References
-
-- https://github.com/vellum-dev/vellum (VELBUILD and virtual device/OS packages)
-- https://github.com/vellum-dev/vellum-cli (supported CLI)
-- https://github.com/vellum-dev/vellum/blob/main/packages/rm-shot/VELBUILD
+Branch: `port/paper-pro-and-move`. Source publication is not Vellum catalog
+acceptance or authorization to deploy to a tablet or call a paid provider.

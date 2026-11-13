@@ -7,11 +7,15 @@ cd -- "$(dirname -- "$0")/../.."
 : "${PACKAGE_INPUT:?Fresh prepared package input directory required}"
 : "${VELLUM_BUILDER_IMAGE:=ghcr.io/eeems/vbuild-builder@sha256:eb6117c636104b06ef9cd9036fa605620bc39ba06183d8f3e52c1caff22578d3}"
 input=$(realpath "$PACKAGE_INPUT")
-dist="$PWD/build/vellum-dist"
-signing="$PWD/build/vellum-signing"
+# Allow isolated source-tree validation to reuse the existing local signing key
+# deliberately, without copying/rotating it or exposing it in the source tree.
+dist="${VELLUM_DIST_DIR:-$PWD/build/vellum-dist}"
+signing="${VELLUM_SIGNING_DIR:-$PWD/build/vellum-signing}"
 mkdir -p "$dist"
+dist=$(realpath "$dist")
 if [[ ! -e "$signing" ]]; then mkdir -m 700 "$signing"; fi
 [[ ! -L "$signing" && $(stat -c %a "$signing") == 700 ]]
+signing=$(realpath "$signing")
 if [[ ! -e "$signing/remarkable-ai-local.rsa" ]]; then
     (umask 077; openssl genrsa -out "$signing/remarkable-ai-local.rsa" 2048)
     openssl rsa -in "$signing/remarkable-ai-local.rsa" -pubout -out "$signing/remarkable-ai-local.rsa.pub" 2>/dev/null

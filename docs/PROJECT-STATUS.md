@@ -1,94 +1,54 @@
-# Current project checkpoint
+# Project checkpoint — native-bounds package parity
 
-## Move toolbar auto-hide (local; not deployed)
+## Current objective
 
-Owner-requested toolbar hiding through inference and prior-state restoration is
-implemented locally. Both focused capture-mode suites pass 40 request scenarios;
-actual-widget/strict-pose checks, inherited live tests and exact Move SDK build
-pass. No device change or provider request occurred. Focused SO/QMD/profile
-artifacts and next deployment checks are in [Move toolbar auto-hide](MOVE-TOOLBAR-AUTOHIDE.md).
-The installed Move still has the Grid-only fix; this update requires fresh
-deployment authority. Unrelated Paper Pro work below is preserved.
+Separate Ferrari and Chiappa Vellum beta2 packages are prepared with native-bounds
+placement parity, consolidated documentation/comments, exact-SDK builds and
+synthetic signed-package audits. The intended generic source commit is ready for
+publication after final tree and outgoing-history verification. No new device deployment, credential change or API call is part
+of this package-preparation task.
 
-Updated: 2026-10-27. OpenClaw registered project: **reMarkable AI — Vellum Mod**
-(`remarkable-ai-vellum-mod`). Select it in **New session → Folder/Place** to resume.
-Registration reuses this repository and does not move files, publish changes or
-attach unrelated sessions. Start with `AGENTS.md`, `PROJECT.md` and `ROADMAP.md`.
+## Evidence by target
 
-## Active work: full-size Paper Pro portrait
+| Evidence | Chiappa / Move | Ferrari / Paper Pro |
+|---|---|---|
+| Native-envelope placement implemented | yes | yes, separate local candidate |
+| Template-only per-request admission removed | yes | yes, local candidate |
+| Exact firmware / SDK |3.28.0.172 / Qt 6.10.3 |3.28.0.172 / Qt 6.10.3 |
+| Geometry / native poses | existing calibrated Move profiles | independent Ferrari profiles and CW/CCW anchors |
+| Current native-bounds module loaded on tablet | verified earlier focused build | not deployed |
+| Real response below writing without overlap | owner confirmed on one ruled-template page | not validated for new method |
+| Undo / Redo / close-reopen | owner confirmed for that Move sample | not validated for new method |
+| New beta2 Vellum install on tablet | not performed | not performed |
 
-Owner requested Paper Pro portrait work on 2026-10-27. Read-only inventory now
-confirms Ferrari / software 3.28.0.172 / internal OS 5.8.203 / Qt 6.10.3.
-The exact official Ferrari SDK is installed locally. Isolated portrait candidate
-geometry passes a synthetic crop/ink/render/scaled-placement pipeline and 37
-rejection checks; it also cross-compiles with the Ferrari SDK. A separate exact
-Ferrari diagnostic target cross-builds, with no runtime/install promotion.
-Root host regressions, the rebuilt Move session runtime/UI suite and both
-mutually exclusive diagnostic policies pass. Exact-Ferrari-SDK diagnostic and
-broker ABI 0.2.0 artifacts are staged in ignored
-`build/paper-pro-portrait-stage/` with hashes/source provenance.
+Local suites, exact-SDK builds and signed lifecycle/payload audits passed for both
+devices. Chiappa single/dual modes ran 78 request scenarios each; Ferrari ran 96.
+Historical runtime/core and offline CLI checks also passed. Results are recorded in [the parity matrix](VELLUM-PARITY.md).
+The new cleaned Move package omits the abandoned signal watcher; its build is not
+identical to the earlier live-tested module. Ferrari's earlier pixel-based runtime
+and historical hardware checks are not validation of its new native-bounds code.
 
-No tablet files, keys, usage, notebooks or services were modified, and no app
-restart or provider request ran. The device has no broker endpoints or observed
-loaded XOVI modules in its inspected current xochitl process. Actual Paper Pro
-logical geometry, native resources, capture and insertion remain unvalidated.
-Next: review/authorize temporary broker + diagnostic loading before measuring
-the live notebook. See [Paper Pro portrait checkpoint](PAPER-PRO-PORTRAIT.md).
-This work does not change the accepted Move beta or its packaging milestone below.
+## Architecture and limits
 
-## Implemented locally
+Shared product-neutral geometry lives in `src/native-content-bounds.h` and
+`src/native-placement.h`. Each runtime retains its own capture geometry, SDK,
+profile, native resource/pose bridge, broker identity and private-state directory.
+Native rM2 and historical one-shot admission remain separate.
 
-- `tools/remarkable-ai/`: target/host CLI with `key status [--json]`, hidden `key
-  set` and `key remove`. Reuses existing private configuration validation/atomic
-  writes, adds serialized writers, preserves unrelated settings and all usage.
-- Status separates application-local allowance from unknown OpenAI account
-  balance; reports charged/unsettled amounts, next reservation/affordability,
-  no independent count cap, and masked SHA-256 credential identity.
-- Native module records allowlisted, timestamped provider metadata with the
-  credential fingerprint. CLI marks it historical and refuses to associate old
-  errors with a different key. No raw provider messages, keys or notebook text
-  enter metadata. Status does not call OpenAI. Replacement never refills budget.
-- `packaging/vellum/`: VELBUILD, generic artifact staging, pinned builder, signed
-  APK build and isolated real APK solver/lifecycle tests. Package pins Move and
-  tested firmware; no restart/funding/private-state lifecycle hooks.
-- Repository instructions, project context, roadmap and this checkpoint persist
-  independently of conversation history.
+Bounds and page/object/viewport snapshots are not monotonic content revisions.
+Equal-envelope edits or a switch away/back between observations can escape.
+Move single-capture retains this limitation; Ferrari keeps its second-capture
+pixel check. Hidden/offscreen/text/erasure samples support the method, not complete
+imported/image/vector coverage. Historical shutdown instability is unresolved.
 
-## Local artifacts and verification
+## Resume
 
-Local artifact: `build/vellum-dist/aarch64/remarkable-ai-move-0.1.0_beta1-r0.apk`.
-SHA-256: `227ffdea01d27237e5d9b536ed6e179e0634b54d3d1394c234ad4c383dc2c440`.
-A test-only r1 APK exercises upgrades. `build/vellum-dist/SHA256SUMS` records the
-bundle hashes. Signing private key stays in ignored `build/vellum-signing/`.
+1. Use exact current package payload and lifecycle audits before any rollout.
+2. Obtain separately scoped device deployment approval; inspect live state first.
+3. Preserve private state and rollback; activate once from owner-confirmed library.
+4. Independently verify mapped code/resources and unchanged usage/state.
+5. Validate Ferrari native-bounds response placement, Undo/Redo and persistence;
+   broader templates/orientations/content require their own evidence.
 
-CLI: 20 synthetic status cases, real hidden-TTY set/remove and preservation;
-25 existing private-config/TTY cases; provider metadata allowlisting/symlink test;
-exact SDK AArch64 compile for CLI and module; CLI has no QtNetwork linkage.
-All 37 dollar-budget/single-capture request scenarios and the rebuilt UI suite
-pass. The separate live suite and all 21 synthetic transport cases pass, including
-provider-observer delivery/cancellation checks. Private workspace report retains
-logs and final package lifecycle results.
-Signed APK install/upgrade/removal preserves synthetic configuration, calibration,
-policy, provider metadata and charges byte-for-byte. Wrong OS/model are rejected.
-Payload inspection verifies the exact built binaries, six generic data files,
-no private state and no lifecycle scripts.
-
-## Live state is separate
-
-No live device/key/budget modifications or API requests were made for this
-packaging/CLI milestone. The earlier narrow UI update is deployed, but its live
-expanded-panel visual check still awaits reopening Test and tapping AI, not Start.
-Current registered project does not claim the new package has been tablet-tested.
-Private device checkpoints/artifacts remain outside this repository under the
-workspace's `reports/remarkable-ui-tidy-20261027/` and
-`reports/remarkable-vellum-cli-20261027/`. Do not copy their contents into Git.
-
-## Next authorized/resumable work
-
-Inspect this checkpoint and Git state first. Do not assume HEAD was pushed.
-The local implementation and packaging checks passed.
-Future device migration, package signing-key trust, installation or publication
-require scoped owner authorization. First-time automatic calibration remains a
-future feature; this package explicitly requires the separately reviewed schema-3
-profile and budget setup. Any changed SO/QMD needs re-reviewed profile fingerprints
-without resetting calibration or usage. The historical shutdown issue is unresolved.
+Abandoned watcher experiments and chronological private deployment notes are
+retained outside the checkout. No automatic retry, restart or paid trial is queued.

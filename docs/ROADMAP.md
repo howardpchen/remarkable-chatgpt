@@ -1,37 +1,30 @@
 # Roadmap
 
-## Active: full-size Paper Pro portrait
+## Current release preparation
 
-1. Read-only Ferrari inventory and exact SDK setup — completed locally/observed.
-2. Isolated portrait geometry pipeline, synthetic rejection tests and separate
-   exact-SDK diagnostic target — completed locally, not device-validated.
-3. Separately authorized temporary diagnostic loading; inspect actual Qt window,
-   resource/ABI and notebook mapping before constructing calibration.
-4. Ferrari-specific native-pose/capture/owner-boundary integration and offline
-   insertion/Undo/Redo/reopen validation.
-5. Reuse existing guarded request/budget flow; separately authorize provider
-   testing and any package deployment/publication. Landscape is out of scope.
+- Implement matching native-envelope placement semantics in separate Chiappa and
+  Ferrari packages; preserve each device's exact geometry/native-pose admission.
+- Rebuild host tests and exact SDK targets; audit signed APK payloads and synthetic
+  install/upgrade/removal including private-state preservation and wrong-model/OS
+  refusals. Publish only inspected generic source/docs and synthetic fixtures.
 
-See [Paper Pro portrait checkpoint](PAPER-PRO-PORTRAIT.md).
+## Hardware validation still needed
 
-## Current milestone: local experimental Vellum package
+- Deploy the new Ferrari candidate only under separate scoped authority; validate
+  native-bounds placement and native Undo/Redo/reopen on the actual device.
+- Validate the new packaged lifecycle on Chiappa; earlier focused module testing
+  does not prove Vellum migration/upgrade/removal for this package.
+- Expand evidence across imported/image/vector content, hidden layers, templates,
+  zoom/pan and both reading orientations; never turn sample evidence into a
+  universal-coverage claim.
 
-1. Implement key status/set/remove and budget reporting without network calls.
-2. Persist only sanitized provider outcome metadata, tied to the credential
-   fingerprint; replacing a key must not label an old error as its verification.
-3. Test hidden entry, state preservation, unsafe paths, malformed ledgers,
-   exhausted budget, authentication/quota/rate-limit guidance and stale outcomes.
-4. Build AArch64 CLI and module with the exact Move SDK.
-5. Package with VELBUILD/APK tooling; test install, upgrade and removal in an
-   isolated root with synthetic state. No automatic service restart or funding.
-6. Document first-time setup/calibration and migration from a manual installation.
-7. Review local artifacts and limitations. Tablet package installation and any
-   public distribution are separate next actions, requiring scoped authorization.
+## Reliability and distribution
 
-## Later
+- Establish a complete content-revision source for equal-envelope edits and
+  switch-away/back; do not revive the failed watcher without a new justified plan.
+- Resolve historical xochitl shutdown instability before broader support claims.
+- Improve supported setup/calibration UX without bundling private calibration,
+  licensed fonts, credentials or funding a budget automatically.
+- Vellum catalog submission is separate from source push/local signed packages.
 
-- Resolve historical shutdown instability before broader support claims.
-- Add supported calibration UX, more firmware/device builds and compatibility CI.
-- Validate package installation/removal on the real Move with rollback.
-- Consider catalog submission (check current upstream contribution rules).
-- Improve UI and answer capabilities without weakening capture or spending guards.
+See [current checkpoint](PROJECT-STATUS.md) and [parity matrix](VELLUM-PARITY.md).
